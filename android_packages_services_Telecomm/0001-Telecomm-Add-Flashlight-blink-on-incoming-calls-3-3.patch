@@ -1,4 +1,4 @@
-From 9c995519a1824cf35fa78cc1d31d6bc24d7bc715 Mon Sep 17 00:00:00 2001
+From 57665029de140950beb8b4b4afee50fff9a9f1b5 Mon Sep 17 00:00:00 2001
 From: Shripal17 <shripal17@gmail.com>
 Date: Tue, 5 Jun 2018 15:54:20 +0000
 Subject: [PATCH] Telecomm: Add Flashlight blink on incoming calls [3/3]

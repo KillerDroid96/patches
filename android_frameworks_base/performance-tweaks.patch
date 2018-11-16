@@ -1,7 +1,7 @@
-From 5edb4174d468b8cb343c8adafddb90a87db50810 Mon Sep 17 00:00:00 2001
+From 9c70f94f7ef5f25bc14e6246ef8fa60f5acc1c60 Mon Sep 17 00:00:00 2001
 From: Jun Su <juns@nvidia.com>
 Date: Sun, 19 Jan 2014 12:43:58 +0800
-Subject: [PATCH 01/17] Disable statusbar time refresh when screen off
+Subject: [PATCH 01/16] Disable statusbar time refresh when screen off
 
 When screen is off, don't refresh the status bar to save power.
 When screen is on, refresh immediately for user experience.
@@ -103,59 +103,10 @@ index dcce77c7c35..e1f523fcf2c 100644
 2.19.1
 
 
-From 6749850c0206bd70755886c2587f74117fac59e2 Mon Sep 17 00:00:00 2001
-From: Jorge Ruesga <jorge@ruesga.com>
-Date: Sun, 8 Jun 2014 00:33:48 +0200
-Subject: [PATCH 02/17] AppOps: Do not prune apps that are not present
-
-Do not prune apps that are not currently present in the device (like
-USB memory ones). While booting, they are not available but must not
-be purged from AppOps, because they are still present in the Android
-app database.
-
-Issue-Id: CYAN-2811
-Change-Id: I6680cbdf0022812b45d966dffee754399e92accb
-Signed-off-by: Jorge Ruesga <jorge@ruesga.com>
-Signed-off-by: Joe Maples <joe@frap129.org>
-Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
----
- .../java/com/android/server/AppOpsService.java    | 15 +++++++++++----
- 1 file changed, 11 insertions(+), 4 deletions(-)
-
-diff --git a/services/core/java/com/android/server/AppOpsService.java b/services/core/java/com/android/server/AppOpsService.java
-index 786d757557d..fae771941c1 100644
---- a/services/core/java/com/android/server/AppOpsService.java
-+++ b/services/core/java/com/android/server/AppOpsService.java
-@@ -619,10 +619,17 @@ public class AppOpsService extends IAppOpsService.Stub {
-                     } catch (RemoteException ignored) {
-                     }
-                     if (curUid != ops.uidState.uid) {
--                        Slog.i(TAG, "Pruning old package " + ops.packageName
--                                + "/" + ops.uidState + ": new uid=" + curUid);
--                        it.remove();
--                        changed = true;
-+                        // Do not prune apps that are not currently present in the device
-+                        // (like SDcard ones). While booting, SDcards are not available but
-+                        // must not be purged from AppOps, because they are still present
-+                        // in the Android app database.
-+                        String pkgName = mContext.getPackageManager().getNameForUid(ops.uidState.uid);
-+                        if (curUid != -1 || pkgName == null || !pkgName.equals(ops.packageName)) {
-+                            Slog.i(TAG, "Pruning old package " + ops.packageName
-+                                    + "/" + ops.uidState + ": new uid=" + curUid);
-+                            it.remove();
-+                            changed = true;
-+                        }
-                     }
-                 }
- 
--- 
-2.19.1
-
-
-From abc64b76025ae99c573ebc4a8f373ad4eb3572e0 Mon Sep 17 00:00:00 2001
+From 99e272921cf8ea8aa542e3273c4634de485e62b9 Mon Sep 17 00:00:00 2001
 From: Chet Kener <Cl3Kener@gmail.com>
 Date: Wed, 17 Dec 2014 22:24:04 -0700
-Subject: [PATCH 03/17] Let's cut Max Excape Animation in Half
+Subject: [PATCH 02/16] Let's cut Max Excape Animation in Half
 
 Change-Id: I5a7740a0297d486acd912d001f9ae92cd48ade5b
 Signed-off-by: Joe Maples <joe@frap129.org>
@@ -181,10 +132,10 @@ index 22b66730cb6..e25040886b0 100644
 2.19.1
 
 
-From 6e3d96fa28f1f9fd45c24b64b37c676d49af03c8 Mon Sep 17 00:00:00 2001
+From c8e23b675ce0c6c6e6d56fe0a6ed55434b3089c4 Mon Sep 17 00:00:00 2001
 From: Maxime Poulain <maxime.poulain@student.uclouvain.be>
 Date: Thu, 19 Mar 2015 23:19:11 +0100
-Subject: [PATCH 04/17] lowered animations duration
+Subject: [PATCH 03/16] lowered animations duration
 
 Change-Id: Idbdaca8469d69fb0d2ddcec4f672dedb8add467d
 Signed-off-by: Joe Maples <joe@frap129.org>
@@ -212,10 +163,10 @@ index a94709de717..7dce730fff1 100644
 2.19.1
 
 
-From 8f5e8cfbc6562f8a0bb5d67968099307a2d68f87 Mon Sep 17 00:00:00 2001
+From 127b1b2fcf0c284649e2ff34f49bb75490ed0773 Mon Sep 17 00:00:00 2001
 From: arter97 <qkrwngud825@gmail.com>
 Date: Tue, 7 Apr 2015 18:46:33 +0900
-Subject: [PATCH 05/17] aapt: Default to 0 compression ratio
+Subject: [PATCH 04/16] aapt: Default to 0 compression ratio
 
 Modern devices now has a blazing fast NAND that storage speed is not the bottle-neck when it comes to reading apks.
 
@@ -249,10 +200,10 @@ index d714687ee91..3484693a02c 100644
 2.19.1
 
 
-From 8d138358bc4f68968758bffad50b9397220ed34e Mon Sep 17 00:00:00 2001
+From 2ba759e6c5500a84abbe050698d1fb88c698d797 Mon Sep 17 00:00:00 2001
 From: Mohammed Irfan <mohammedirfan1992@hotmail.com>
 Date: Tue, 21 Jul 2015 04:34:04 -0400
-Subject: [PATCH 06/17] Guard in short-circuit evaluations for stringSplit
+Subject: [PATCH 05/16] Guard in short-circuit evaluations for stringSplit
  methods.
 
 * splitRange function should also check if string is empty instead of
@@ -293,10 +244,10 @@ index 0f007ea1697..b4ab1130b63 100644
 2.19.1
 
 
-From 6f071f3ae4f3d6bdf0a8a045a9f294a289f643f6 Mon Sep 17 00:00:00 2001
+From d0a6737dcf40c2bfffeef6d1419cfd51847c4c24 Mon Sep 17 00:00:00 2001
 From: Steve Kondik <steve@cyngn.com>
 Date: Wed, 27 Jul 2016 17:36:47 -0700
-Subject: [PATCH 07/17] MountService: Unmount internal storage before
+Subject: [PATCH 06/16] MountService: Unmount internal storage before
  restarting framework
 
 This is a squash of the following two commits that have been
@@ -324,10 +275,10 @@ Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
  1 file changed, 6 insertions(+)
 
 diff --git a/services/core/java/com/android/server/StorageManagerService.java b/services/core/java/com/android/server/StorageManagerService.java
-index 85b4ea6f639..a0d530bb1ef 100644
+index 0d172395a51..163ea71aa81 100644
 --- a/services/core/java/com/android/server/StorageManagerService.java
 +++ b/services/core/java/com/android/server/StorageManagerService.java
-@@ -2249,6 +2249,12 @@ class StorageManagerService extends IStorageManager.Stub
+@@ -2250,6 +2250,12 @@ class StorageManagerService extends IStorageManager.Stub
          try {
              mVold.fdeCheckPassword(password);
              mHandler.postDelayed(() -> {
@@ -344,10 +295,10 @@ index 85b4ea6f639..a0d530bb1ef 100644
 2.19.1
 
 
-From 8fe78bf23a82550eeb4cfd9e5dfc4984ec5b7fc3 Mon Sep 17 00:00:00 2001
+From c0c5be9c1424b87dc53a550c278ade5dc5634255 Mon Sep 17 00:00:00 2001
 From: yangbingqian <bqyang720@gmail.com>
 Date: Thu, 9 Mar 2017 23:07:48 +0800
-Subject: [PATCH 08/17] Clean receivers completely when forceStop the process
+Subject: [PATCH 07/16] Clean receivers completely when forceStop the process
 
 when forceStop is called, then the broadcast-receiver will be
 cleaned up.However, only receivers of the userId is cleaned.
@@ -402,10 +353,10 @@ index 574ca4a340e..e64cbc87abf 100644
 2.19.1
 
 
-From 8093cc049689624ce53895310aca23c04de5c38c Mon Sep 17 00:00:00 2001
+From b0678627a8b14c0bc65a10e21bafb7cafca17aa7 Mon Sep 17 00:00:00 2001
 From: Alex Naidis <alex.naidis@linux.com>
 Date: Thu, 16 Mar 2017 14:59:53 +0100
-Subject: [PATCH 09/17] ViewConfiguration: Set scroll friction to 0.012
+Subject: [PATCH 08/16] ViewConfiguration: Set scroll friction to 0.012
 
 Reduce scroll friction to a better default
 value which is used in Scroller and Overscroller.
@@ -434,10 +385,10 @@ index 8f639f70f32..01f3bfd73be 100644
 2.19.1
 
 
-From 687d1a67d81a7b9555fc0711ba4e26b943fcaafb Mon Sep 17 00:00:00 2001
+From d2a0597a58af89d3b3409973b2ce5b433413f2cd Mon Sep 17 00:00:00 2001
 From: Danny Baumann <dannybaumann@web.de>
 Date: Fri, 14 Nov 2014 09:44:49 -0800
-Subject: [PATCH 10/17] Factor out preference-in-storage check to overridable
+Subject: [PATCH 09/16] Factor out preference-in-storage check to overridable
  method.
 
 Change-Id: I2fff3192802f8a180330fda66388eda394334a5a
@@ -479,10 +430,10 @@ index 4306bc47f2b..0832163d756 100644
 2.19.1
 
 
-From b3e20af1825dd9564532d89b7bd866ddeda17f28 Mon Sep 17 00:00:00 2001
+From b42abc70711d2b2b99fa170f1eaedf91a709fdfe Mon Sep 17 00:00:00 2001
 From: Sultanxda <sultanxda@gmail.com>
 Date: Sat, 15 Apr 2017 17:43:52 -0700
-Subject: [PATCH 11/17] Speed up wake-and-unlock scenario
+Subject: [PATCH 10/16] Speed up wake-and-unlock scenario
 
   * Directly dismiss keyguard instead of using a fade-out animation
   * Skip virtual navigation button animation on wake
@@ -594,10 +545,10 @@ index d99b4eb0115..02dd93fc511 100644
 2.19.1
 
 
-From d933f07a6db754a7846add1de763c30ffa61c171 Mon Sep 17 00:00:00 2001
+From d33f15ddc6b880e70e307c21640f19cb053d6275 Mon Sep 17 00:00:00 2001
 From: ZeNiXxX <vitjahermann@gmail.com>
 Date: Tue, 21 Aug 2018 13:53:13 +0200
-Subject: [PATCH 12/17] Speed Up Animation & UI
+Subject: [PATCH 11/16] Speed Up Animation & UI
 
 Speed things up to the max
 
@@ -615,6 +566,7 @@ Signed-off-by: Eliminater74 <eliminater74@gmail.com>
 
 modified and squashed by @ZeNiXxX
 speed up animation
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
 Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
 ---
  core/res/res/values/config.xml          |  1 +
@@ -700,10 +652,10 @@ index e860f098395..62bd8695197 100644
 2.19.1
 
 
-From 2dfcca9d231724bcb47b57b76dd96dad31d0baa2 Mon Sep 17 00:00:00 2001
+From 5e744b7275a991b9c749bc3906895ca988d2aa41 Mon Sep 17 00:00:00 2001
 From: Chet Kener <Cl3Kener@gmail.com>
 Date: Tue, 6 Oct 2015 10:23:07 -0400
-Subject: [PATCH 13/17] Speed up StatusBar
+Subject: [PATCH 12/16] Speed up StatusBar
 
 Change-Id: I514f093050a94923da02f4a1073b1772bd575671
 Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
@@ -742,10 +694,10 @@ index 81c6a33f8ab..27402f90c53 100644
 2.19.1
 
 
-From 68b691c281663a8b2b0449e19790a264230fed48 Mon Sep 17 00:00:00 2001
+From e0dc2a83ae4c537d942f07cfea84b3ee0b8d3425 Mon Sep 17 00:00:00 2001
 From: Peter Schiller <peterschiller@google.com>
 Date: Wed, 11 Nov 2015 12:54:14 -0800
-Subject: [PATCH 14/17] SystemUI: Adjusted animation timing
+Subject: [PATCH 13/16] SystemUI: Adjusted animation timing
 
 Change-Id: I7f001abe0c97167ef9bdf83b3371b0875fd1c59f
 Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
@@ -1018,10 +970,10 @@ index 4234da2bf7a..28eeedb113e 100644
 2.19.1
 
 
-From 27732960d84c5e36f9a417bb23e7084a0f0b4084 Mon Sep 17 00:00:00 2001
+From 11dce0bb595a4d9f4f93520422f7ec7c04ccbb86 Mon Sep 17 00:00:00 2001
 From: BigBrother1984 <carlosavignano@aospa.co>
 Date: Thu, 13 Nov 2014 22:46:12 +0100
-Subject: [PATCH 15/17] SystemUI: Tiny expanding improvement
+Subject: [PATCH 14/16] SystemUI: Tiny expanding improvement
 
 Change-Id: I2b650c31d44f9f5762f6510611813b1795cdc740
 Signed-off-by: BigBrother1984 <carlosavignano@aospa.co>
@@ -1055,56 +1007,10 @@ index 377fab549a7..a8af0b65dab 100644
 2.19.1
 
 
-From 851a8d5e0521b6b15c5f12a95707e5e67ded6357 Mon Sep 17 00:00:00 2001
-From: Manojkumar Murugeshan <muruge@codeaurora.org>
-Date: Thu, 7 Jun 2018 17:00:47 +0530
-Subject: [PATCH 16/17] SystemUI: Name Cellular Tile based on carrier
-
-CRs-Fixed: 957287
-
-Change-Id: Iac9c3426299db04029b8f9e2ea32a1fdc2faf78e
-Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
----
- .../src/com/android/systemui/qs/tiles/CellularTile.java   | 8 +++++++-
- 1 file changed, 7 insertions(+), 1 deletion(-)
-
-diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
-index 8583e8112f1..010d1059dd4 100644
---- a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
-+++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
-@@ -167,17 +167,23 @@ public class CellularTile extends QSTileImpl<SignalState> {
-             cb = mSignalCallback.mInfo;
-         }
- 
-+        DataUsageController.DataUsageInfo carrierLabelInfo = mDataController.getDataUsageInfo();
-         final Resources r = mContext.getResources();
-         state.activityIn = cb.enabled && cb.activityIn;
-         state.activityOut = cb.enabled && cb.activityOut;
--        state.label = r.getString(R.string.mobile_data);
-         boolean mobileDataEnabled = mDataController.isMobileDataSupported()
-                 && mDataController.isMobileDataEnabled();
-         state.value = mobileDataEnabled;
-         state.expandedAccessibilityClassName = Switch.class.getName();
-         if (cb.noSim) {
-+            state.label = r.getString(R.string.mobile_data);
-             state.icon = ResourceIcon.get(R.drawable.ic_qs_no_sim);
-         } else {
-+            if (carrierLabelInfo != null) {
-+                state.label = carrierLabelInfo.carrier;
-+            } else {
-+                state.label = r.getString(R.string.mobile_data);
-+            }
-             state.icon = ResourceIcon.get(R.drawable.ic_swap_vert);
-         }
- 
--- 
-2.19.1
-
-
-From 204f87b0f3f35d6ab72edce647b039e138485761 Mon Sep 17 00:00:00 2001
+From 5dc988888fc9c463f353243a6f515539857806d9 Mon Sep 17 00:00:00 2001
 From: xyyx <xyyx@mail.ru>
 Date: Wed, 15 Aug 2018 17:29:02 -0700
-Subject: [PATCH 17/17] SystemUI: Remove data tile dialog
+Subject: [PATCH 15/16] SystemUI: Remove data tile dialog
 
 Change-Id: Ib5e80e49795ce4413519e854d3f10195eab52e16
 Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
@@ -1133,6 +1039,46 @@ index 010d1059dd4..4e78ddac6cf 100644
      }
  
      private void maybeShowDisableDialog() {
+-- 
+2.19.1
+
+
+From 4ac8dba4c6920989aaa4cbe306c2b61322f69977 Mon Sep 17 00:00:00 2001
+From: PMS22 <prathams99@rediff.com>
+Date: Tue, 5 Jun 2018 16:00:10 +0000
+Subject: [PATCH 16/16] Add Flashlight blink on incoming calls [1/3]
+
+- There are tons of apps out there on playstore which replicate the same
+  iOS behaviour. Let's just add it in system keeping it disabled by default.
+
+Change-Id: I43f22939c9377bf23adaa4bb2bbfdfc2bde722f1
+Signed-off-by: PMS22 <prathams99@rediff.com>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/provider/Settings.java | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index 7e442474827..bb4fc2540fe 100644
+--- a/core/java/android/provider/Settings.java
++++ b/core/java/android/provider/Settings.java
+@@ -4655,6 +4655,16 @@ public final class Settings {
+          */
+         public static final String RECENTS_ICON_PACK = "recents_icon_pack";
+ 
++        /**
++         * Whether to blink flashlight for incoming calls
++         * 0 = Disabled (Default)
++         * 1 = Blink flashlight only in Ringer mode
++         * 2 = Blink flashlight only in DND mode
++         * 3 = Blink flashlight always regardless of ringer mode
++         * @hide
++         */
++        public static final String FLASHLIGHT_ON_CALL = "flashlight_on_call";
++
+         /**
+          * Settings to backup. This is here so that it's in the same place as the settings
+          * keys and easy to update.
 -- 
 2.19.1
 

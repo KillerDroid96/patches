@@ -1,0 +1,96 @@
+From 195201283ce5fcea7e95c39efdd4cb287f3b5b96 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 16:49:59 -0600
+Subject: [PATCH] Update install graphics
+
+Change-Id: I002d54d3a655fc3bbdb1f0357e332419beef4181
+---
+ tools/releasetools/ota_from_target_files.py | 68 +++++++++++++--------
+ 1 file changed, 41 insertions(+), 27 deletions(-)
+
+diff --git a/tools/releasetools/ota_from_target_files.py b/tools/releasetools/ota_from_target_files.py
+index a05ed2fe1..5adb2b178 100755
+--- a/tools/releasetools/ota_from_target_files.py
++++ b/tools/releasetools/ota_from_target_files.py
+@@ -835,37 +835,51 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
+ 
+   system_progress = 0.75
+ 
+-  script.Print("                                         ");
+-  script.Print("            _____            _     _     ");
+-  script.Print("           |  __ \          (_)   | |    ");
+-  script.Print("   ___ _ __| |  | |_ __ ___  _  __| |    ");
+-  script.Print("  / __| '__| |  | | '__/ _ \| |/ _\`|    ");
+-  script.Print(" | (__| |  | |__| | | | (_) | | (_| |    ");
+-  script.Print("  \___|_|  |_____/|_|_ \___/|_|\__,_|  _ ");
+-  script.Print("     /\             | |         (_)   | |");
+-  script.Print("    /  \   _ __   __| |_ __ ___  _  __| |");
+-  script.Print("   / /\ \ | '_ \ / _\`| '__/ _ \| |/ _\`|");
+-  script.Print("  / ____ \| | | | (_| | | | (_) | | (_| |");
+-  script.Print(" /_/    \_\_| |_|\__,_|_|  \___/|_|\__,_|");
+-  script.Print("                                         ");
+-
+-  buildid = target_info.GetBuildProp("ro.modversion")
+-  androidver = target_info.GetBuildProp("ro.build.version.release")
+-  buildidn = target_info.GetBuildProp("ro.build.id")
++  script.Print("                                                ");
++  script.Print("                   _____            _     _     ");
++  script.Print("                  |  __ \          (_)   | |    ");
++  script.Print("          ___ _ __| |  | |_ __ ___  _  __| |    ");
++  script.Print("         / __| '__| |  | | '__/ _ \| |/ _\`|    ");
++  script.Print("        | (__| |  | |__| | | | (_) | | (_| |    ");
++  script.Print("         \___|_|  |_____/|_|  \___/|_|\__,_|    ");
++  script.Print("                         _           _     _    ");
++  script.Print("         /\             | |         (_)   | |   ");
++  script.Print("        /  \   _ __   __| |_ __ ___  _  __| |   ");
++  script.Print("       / /\ \ | '_ \ / _\`| '__/ _ \| |/ _\`|   ");
++  script.Print("      / ____ \| | | | (_| | | | (_) | | (_| |   ");
++  script.Print("     /_/    \_\_| |_|\__,_|_|  \___/|_|\__,_|   ");
++  script.Print("                                                ");
++  androidver = target_info.GetBuildProp("ro.crdroid.version")
++  romid = target_info.GetBuildProp("ro.modversion")
++  buildtype = target_info.GetBuildProp("ro.build.type")
+   buildday = target_info.GetBuildProp("ro.build.date")
+   securep = target_info.GetBuildProp("ro.build.version.security_patch")
+-  device = target_info.GetBuildProp("ro.product.name")
++  buildhst = target_info.GetBuildProp("ro.build.host")
++  maintainer = target_info.GetBuildProp("ro.build.user")
+   manufacturer = target_info.GetBuildProp("ro.product.manufacturer")
+-  script.Print("***********************************************");
+-  script.Print(" ROM version      : %s"%(buildid));
+-  script.Print(" Android version  : %s"%(androidver));
+-  script.Print(" Security patch   : %s"%(securep));
+-  script.Print(" Build date       : %s"%(buildday));
+-  script.Print("***********************************************");
++  device = target_info.GetBuildProp("ro.product.name")
++  codename = target_info.GetBuildProp("ro.lineage.device")
++  kernel = ("/home/killerdroid96/Github/CRD/out/target/product/dumpling/obj/KERNEL_OBJ/include/config/kernel.release")
++  kernelver = open(kernel).read()
++  modem = target_info.GetBuildProp("ro.build.expect.modem")
++  firmware = target_info.GetBuildProp("ro.build.expect.firmware")
++  script.Print(" ===============================================");
++  script.Print(" crDroid Version  : %s"%(romid));
++  script.Print(" Kernel Version   : %s"%(kernelver));
++  script.Print(" Build Date       : %s"%(buildday));
++  script.Print(" ===============================================");
++  script.Print(" Android Version  : %s"%(androidver));
++  script.Print(" Firmware Version : %s"%(firmware));
++  script.Print(" Security Patch   : %s"%(securep));
++  #script.Print(" Modem Version    : %s"%(modem));
++  script.Print(" ===============================================");
+   script.Print(" Device           : %s"%(device));
+-  script.Print(" Manufacturer     : %s"%(manufacturer));
+-  script.Print("***********************************************");
+-  script.Print("                                         ");
++  script.Print(" Codename         : %s"%(codename));
++  #script.Print(" Build Type       : %s"%(buildtype));
++  script.Print(" Build Host       : %s"%(buildhst));
++  script.Print(" Maintainer       : %s"%(maintainer));
++  #script.Print(" Manufacturer     : %s"%(manufacturer));
++  script.Print(" ===============================================");
+ 
+   if OPTIONS.wipe_user_data:
+     system_progress -= 0.1
+-- 
+2.19.1
+

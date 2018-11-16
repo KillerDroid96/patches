@@ -1,5 +1,15 @@
+From e0b9354506be86429b782acc4302d9cf11f02e43 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 14:48:06 -0600
+Subject: [PATCH] Redirect OTA
+
+Change-Id: I12d6c8be3fffc3caa733681a642e76c5b9641b94
+---
+ assets/update_config | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
 diff --git a/assets/update_config b/assets/update_config
-index e44921d6..33f65ed4 100644
+index e44921d6d..33f65ed4c 100644
 --- a/assets/update_config
 +++ b/assets/update_config
 @@ -6,7 +6,7 @@
@@ -11,3 +21,6 @@ index e44921d6..33f65ed4 100644
  device_name=ro.lineage.device
   
  #
+-- 
+2.19.1
+
