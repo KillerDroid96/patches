@@ -1,0 +1,48 @@
+From 6749850c0206bd70755886c2587f74117fac59e2 Mon Sep 17 00:00:00 2001
+From: Jorge Ruesga <jorge@ruesga.com>
+Date: Sun, 8 Jun 2014 00:33:48 +0200
+Subject: [PATCH 02/17] AppOps: Do not prune apps that are not present
+
+Do not prune apps that are not currently present in the device (like
+USB memory ones). While booting, they are not available but must not
+be purged from AppOps, because they are still present in the Android
+app database.
+
+Issue-Id: CYAN-2811
+Change-Id: I6680cbdf0022812b45d966dffee754399e92accb
+Signed-off-by: Jorge Ruesga <jorge@ruesga.com>
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../java/com/android/server/AppOpsService.java    | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/services/core/java/com/android/server/AppOpsService.java b/services/core/java/com/android/server/AppOpsService.java
+index 786d757557d..fae771941c1 100644
+--- a/services/core/java/com/android/server/AppOpsService.java
++++ b/services/core/java/com/android/server/AppOpsService.java
+@@ -619,10 +619,17 @@ public class AppOpsService extends IAppOpsService.Stub {
+                     } catch (RemoteException ignored) {
+                     }
+                     if (curUid != ops.uidState.uid) {
+-                        Slog.i(TAG, "Pruning old package " + ops.packageName
+-                                + "/" + ops.uidState + ": new uid=" + curUid);
+-                        it.remove();
+-                        changed = true;
++                        // Do not prune apps that are not currently present in the device
++                        // (like SDcard ones). While booting, SDcards are not available but
++                        // must not be purged from AppOps, because they are still present
++                        // in the Android app database.
++                        String pkgName = mContext.getPackageManager().getNameForUid(ops.uidState.uid);
++                        if (curUid != -1 || pkgName == null || !pkgName.equals(ops.packageName)) {
++                            Slog.i(TAG, "Pruning old package " + ops.packageName
++                                    + "/" + ops.uidState + ": new uid=" + curUid);
++                            it.remove();
++                            changed = true;
++                        }
+                     }
+                 }
+ 
+-- 
+2.19.1
+

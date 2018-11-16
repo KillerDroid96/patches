@@ -1,0 +1,26 @@
+From 29def9524df1c9651b47ed47863676cbcec5593e Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:08:25 -0600
+Subject: [PATCH 10/11] Enable AOSP recents by default
+
+Change-Id: I777199d251e3c1462f5c0a3abedda5c5e5ad4e36
+---
+ res/xml/crdroid_settings_recents.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_recents.xml b/res/xml/crdroid_settings_recents.xml
+index c262a97d8..67e0da441 100644
+--- a/res/xml/crdroid_settings_recents.xml
++++ b/res/xml/crdroid_settings_recents.xml
+@@ -25,7 +25,7 @@
+         android:dialogTitle="@string/recents_style_title"
+         android:entries="@array/recents_style_entries"
+         android:entryValues="@array/recents_style_values"
+-        android:defaultValue="0" />
++        android:defaultValue="1" />
+ 
+     <Preference
+         android:key="recents_icon_pack"
+-- 
+2.19.1
+

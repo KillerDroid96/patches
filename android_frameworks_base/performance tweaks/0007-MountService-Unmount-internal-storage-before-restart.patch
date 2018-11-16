@@ -1,0 +1,50 @@
+From 6f071f3ae4f3d6bdf0a8a045a9f294a289f643f6 Mon Sep 17 00:00:00 2001
+From: Steve Kondik <steve@cyngn.com>
+Date: Wed, 27 Jul 2016 17:36:47 -0700
+Subject: [PATCH 07/17] MountService: Unmount internal storage before
+ restarting framework
+
+This is a squash of the following two commits that have been
+binderized to work on P.
+
+mountservice: Shut down volumes before restarting framework
+
+ * Vold assumes that when FUSE is killed, the mount is gone. This
+   isn't true with sdcardfs, since the daemon doesn't continue
+   to run. Cryptfs was assuming this behavior, and the system would
+   hang during decryption since the emulated storage doesn't get
+   unmounted.
+ * Send the shutdown command before committing suicide.
+
+mountservice: Don't nuke all volumes when decrypting
+
+ * Instead, just unmount the emulated internal volume since
+   it's the only one which can prevent cryptfs from restarting.
+
+Change-Id: Iac4bc8d2b7ce0a4cacafb19e4edda84e4b752f29
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../core/java/com/android/server/StorageManagerService.java | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/services/core/java/com/android/server/StorageManagerService.java b/services/core/java/com/android/server/StorageManagerService.java
+index 85b4ea6f639..a0d530bb1ef 100644
+--- a/services/core/java/com/android/server/StorageManagerService.java
++++ b/services/core/java/com/android/server/StorageManagerService.java
+@@ -2249,6 +2249,12 @@ class StorageManagerService extends IStorageManager.Stub
+         try {
+             mVold.fdeCheckPassword(password);
+             mHandler.postDelayed(() -> {
++                // unmount the internal emulated volume first
++                try {
++                    mVold.unmount(findVolumeByIdOrThrow("emulated").id);
++                } catch (Exception e) {
++                    Slog.e(TAG, "unable to shut down internal volume", e);
++                }
+                 try {
+                     mVold.fdeRestart();
+                 } catch (Exception e) {
+-- 
+2.19.1
+

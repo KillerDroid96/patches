@@ -1,0 +1,26 @@
+From 2a5b42c24394e2d9c6cf91e23fcb14b4a4849d60 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:41:43 -0600
+Subject: [PATCH 03/11] Enable QS pulldown from right by default
+
+Change-Id: Ide3a1574e9068f28a86b6c1d192d5d9f502cedce
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index c45813764..e07daaca1 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -248,7 +248,7 @@
+             android:title="@string/status_bar_quick_qs_pulldown_title"
+             android:entries="@array/status_bar_quick_qs_pulldown_entries"
+             android:entryValues="@array/status_bar_quick_qs_pulldown_values"
+-            android:defaultValue="0" />
++            android:defaultValue="2" />
+ 
+         <com.crdroid.settings.preferences.SystemSettingListPreference
+             android:key="qs_smart_pulldown"
+-- 
+2.19.1
+

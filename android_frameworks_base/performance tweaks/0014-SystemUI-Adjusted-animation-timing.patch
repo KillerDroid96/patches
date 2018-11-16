@@ -1,0 +1,275 @@
+From 68b691c281663a8b2b0449e19790a264230fed48 Mon Sep 17 00:00:00 2001
+From: Peter Schiller <peterschiller@google.com>
+Date: Wed, 11 Nov 2015 12:54:14 -0800
+Subject: [PATCH 14/17] SystemUI: Adjusted animation timing
+
+Change-Id: I7f001abe0c97167ef9bdf83b3371b0875fd1c59f
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/res/res/anim/activity_open_enter.xml              |  4 ++--
+ core/res/res/anim/task_close_enter.xml                 | 10 +++++-----
+ core/res/res/anim/task_close_exit.xml                  | 10 +++++-----
+ core/res/res/anim/task_open_enter.xml                  | 10 +++++-----
+ core/res/res/anim/task_open_exit.xml                   | 10 +++++-----
+ .../statusbar/phone/NotificationPanelView.java         |  2 +-
+ .../android/systemui/statusbar/phone/PanelView.java    |  9 +++++++++
+ .../android/systemui/statusbar/phone/StatusBar.java    |  2 +-
+ .../core/java/com/android/server/wm/AppTransition.java |  6 +++---
+ 9 files changed, 36 insertions(+), 27 deletions(-)
+
+diff --git a/core/res/res/anim/activity_open_enter.xml b/core/res/res/anim/activity_open_enter.xml
+index cb0307026e2..952fd51360f 100644
+--- a/core/res/res/anim/activity_open_enter.xml
++++ b/core/res/res/anim/activity_open_enter.xml
+@@ -22,7 +22,7 @@
+         android:fromYDelta="4.1%"
+         android:toYDelta="0"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="425"/>
++        android:duration="300"/>
+     <cliprect
+         android:fromLeft="0%"
+         android:fromTop="95.9%"
+@@ -33,5 +33,5 @@
+         android:toRight="100%"
+         android:toBottom="100%"
+         android:interpolator="@interpolator/fast_out_extra_slow_in"
+-        android:duration="425"/>
++        android:duration="300"/>
+ </set>
+diff --git a/core/res/res/anim/task_close_enter.xml b/core/res/res/anim/task_close_enter.xml
+index b059aa9cb28..87637125d8b 100644
+--- a/core/res/res/anim/task_close_enter.xml
++++ b/core/res/res/anim/task_close_enter.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="217"/>
++        android:duration="200"/>
+ 
+     <translate
+         android:fromXDelta="-105%"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0526"
+@@ -51,7 +51,7 @@
+         android:fillBefore="true"
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="0.95"
+@@ -65,5 +65,5 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+         android:startOffset="283"
+-        android:duration="317"/>
+-</set>
+\ No newline at end of file
++        android:duration="300"/>
++</set>
+diff --git a/core/res/res/anim/task_close_exit.xml b/core/res/res/anim/task_close_exit.xml
+index c9ade227819..0a9c340fa46 100644
+--- a/core/res/res/anim/task_close_exit.xml
++++ b/core/res/res/anim/task_close_exit.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <translate
+         android:fromXDelta="0"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0"
+@@ -51,11 +51,11 @@
+         android:pivotX="50%"
+         android:pivotY="50%"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <!-- This is needed to keep the animation running while task_open_enter completes -->
+     <alpha
+         android:fromAlpha="1.0"
+         android:toAlpha="1.0"
+-        android:duration="600"/>
+-</set>
+\ No newline at end of file
++        android:duration="500"/>
++</set>
+diff --git a/core/res/res/anim/task_open_enter.xml b/core/res/res/anim/task_open_enter.xml
+index 5c618594364..07172cb52fd 100644
+--- a/core/res/res/anim/task_open_enter.xml
++++ b/core/res/res/anim/task_open_enter.xml
+@@ -30,7 +30,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="217"/>
++        android:duration="200"/>
+ 
+     <translate
+         android:fromXDelta="105%"
+@@ -40,7 +40,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0526"
+@@ -53,7 +53,7 @@
+         android:fillBefore="true"
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="0.95"
+@@ -67,5 +67,5 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+         android:startOffset="283"
+-        android:duration="317"/>
+-</set>
+\ No newline at end of file
++        android:duration="300"/>
++</set>
+diff --git a/core/res/res/anim/task_open_exit.xml b/core/res/res/anim/task_open_exit.xml
+index 9394c577da7..3c33e398b8a 100644
+--- a/core/res/res/anim/task_open_exit.xml
++++ b/core/res/res/anim/task_open_exit.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <translate
+         android:fromXDelta="0"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="1.0"
+@@ -51,11 +51,11 @@
+         android:pivotX="50%"
+         android:pivotY="50%"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <!-- This is needed to keep the animation running while task_open_enter completes -->
+     <alpha
+         android:fromAlpha="1.0"
+         android:toAlpha="1.0"
+-        android:duration="600"/>
+-</set>
+\ No newline at end of file
++        android:duration="500"/>
++</set>
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+index 92918c638bb..c0344b4fef7 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+@@ -2435,7 +2435,7 @@ public class NotificationPanelView extends PanelView implements
+ 
+                 // This gets called in the middle of the touch handling, where the state is still
+                 // that we are tracking the panel. Collapse the panel after this is done.
+-                post(mPostCollapseRunnable);
++                post(mEmptySpaceClickedRunnable);
+                 return false;
+             default:
+                 return true;
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
+index e4eeec11fdf..30dec3092e6 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
+@@ -66,6 +66,8 @@ public abstract class PanelView extends FrameLayout {
+     private int mFixedDuration = NO_FIXED_DURATION;
+     private BiConsumer<Float, Boolean> mExpansionListener;
+ 
++    public static final float SPEED_UP_FACTOR_CLICKED = 1.7f;
++
+     private final void logf(String fmt, Object... args) {
+         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
+     }
+@@ -1213,6 +1215,13 @@ public abstract class PanelView extends FrameLayout {
+         return onMiddleClicked();
+     }
+ 
++    protected final Runnable mEmptySpaceClickedRunnable = new Runnable() {
++        @Override
++        public void run() {
++            collapse(false /* delayed */, SPEED_UP_FACTOR_CLICKED /* speedUpFactor */);
++        }
++    };
++
+     protected final Runnable mPostCollapseRunnable = new Runnable() {
+         @Override
+         public void run() {
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index 27402f90c53..582617050be 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -5610,7 +5610,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+         if (!mNotificationPanel.isFullyCollapsed()) {
+             // close the shade if it was open
+             animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL, true /* force */,
+-                    true /* delayed */);
++                    true /* delayed */, NotificationPanelView.SPEED_UP_FACTOR_CLICKED);
+             visibilityChanged(false);
+ 
+             return true;
+diff --git a/services/core/java/com/android/server/wm/AppTransition.java b/services/core/java/com/android/server/wm/AppTransition.java
+index 4234da2bf7a..28eeedb113e 100644
+--- a/services/core/java/com/android/server/wm/AppTransition.java
++++ b/services/core/java/com/android/server/wm/AppTransition.java
+@@ -152,7 +152,7 @@ public class AppTransition implements Dump {
+     /** Fraction of animation at which the recents thumbnail becomes completely transparent */
+     private static final float RECENTS_THUMBNAIL_FADEOUT_FRACTION = 0.5f;
+ 
+-    static final int DEFAULT_APP_TRANSITION_DURATION = 336;
++    static final int DEFAULT_APP_TRANSITION_DURATION = 270;
+ 
+     /** Interpolator to be used for animations that respond directly to a touch */
+     static final Interpolator TOUCH_RESPONSE_INTERPOLATOR =
+@@ -165,8 +165,8 @@ public class AppTransition implements Dump {
+      * Maximum duration for the clip reveal animation. This is used when there is a lot of movement
+      * involved, to make it more understandable.
+      */
+-    private static final int MAX_CLIP_REVEAL_TRANSITION_DURATION = 420;
+-    private static final int THUMBNAIL_APP_TRANSITION_DURATION = 336;
++    private static final int MAX_CLIP_REVEAL_TRANSITION_DURATION = 270;
++    private static final int THUMBNAIL_APP_TRANSITION_DURATION = 270;
+     private static final long APP_TRANSITION_TIMEOUT_MS = 5000;
+ 
+     private final Context mContext;
+-- 
+2.19.1
+

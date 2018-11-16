@@ -1,0 +1,57 @@
+From 8fe78bf23a82550eeb4cfd9e5dfc4984ec5b7fc3 Mon Sep 17 00:00:00 2001
+From: yangbingqian <bqyang720@gmail.com>
+Date: Thu, 9 Mar 2017 23:07:48 +0800
+Subject: [PATCH 08/17] Clean receivers completely when forceStop the process
+
+when forceStop is called, then the broadcast-receiver will be
+cleaned up.However, only receivers of the userId is cleaned.
+When the userId is not UserHandle.USER_ALL and the userId of
+BroadcastRecord is UserHandle.USER_ALL. Then the receiver of
+this BR will not be cleaned up. Thus the receiver of this
+process with this userId will be dispatched. What's worse, it
+may cause severe problems under multi-user
+
+It should be conflict with the intention of forceStop method
+
+https://code.google.com/p/android/issues/detail?id=259998
+
+Test: am broadcast -a xxx --user, and then force stop the
+process responded to action xxx, if this broadcast is stucked
+for a while. the process will be started
+
+Change-Id: I38ef4116e16c97f257da37bc08e5ef3f64eff7ef
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../core/java/com/android/server/am/BroadcastRecord.java | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/services/core/java/com/android/server/am/BroadcastRecord.java b/services/core/java/com/android/server/am/BroadcastRecord.java
+index 574ca4a340e..e64cbc87abf 100644
+--- a/services/core/java/com/android/server/am/BroadcastRecord.java
++++ b/services/core/java/com/android/server/am/BroadcastRecord.java
+@@ -300,7 +300,9 @@ final class BroadcastRecord extends Binder {
+ 
+     boolean cleanupDisabledPackageReceiversLocked(
+             String packageName, Set<String> filterByClasses, int userId, boolean doit) {
+-        if ((userId != UserHandle.USER_ALL && this.userId != userId) || receivers == null) {
++        final boolean cleanUpAllUser = userId == UserHandle.USER_ALL;
++        final boolean sendToAllUser = this.userId == UserHandle.USER_ALL;
++        if ((!cleanUpAllUser && !sendToAllUser && this.userId != userId) || receivers == null) {
+             return false;
+         }
+ 
+@@ -316,7 +318,10 @@ final class BroadcastRecord extends Binder {
+             final boolean sameComponent = packageName == null
+                     || (info.applicationInfo.packageName.equals(packageName)
+                     && (filterByClasses == null || filterByClasses.contains(info.name)));
+-            if (sameComponent) {
++            final boolean sameUser = cleanUpAllUser
++                    || UserHandle.getUserId(info.applicationInfo.uid) == userId;
++
++            if (sameComponent && sameUser) {
+                 if (!doit) {
+                     return true;
+                 }
+-- 
+2.19.1
+

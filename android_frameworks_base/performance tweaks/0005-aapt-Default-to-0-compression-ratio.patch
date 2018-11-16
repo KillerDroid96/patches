@@ -1,0 +1,36 @@
+From 8f5e8cfbc6562f8a0bb5d67968099307a2d68f87 Mon Sep 17 00:00:00 2001
+From: arter97 <qkrwngud825@gmail.com>
+Date: Tue, 7 Apr 2015 18:46:33 +0900
+Subject: [PATCH 05/17] aapt: Default to 0 compression ratio
+
+Modern devices now has a blazing fast NAND that storage speed is not the bottle-neck when it comes to reading apks.
+
+So use 0 compression ratio for improving speed and memory usage.
+
+Change-Id: I20820ed514eddb02164df5d65e870a80f9332172
+Signed-off-by: arter97 <qkrwngud825@gmail.com>
+Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ tools/aapt/Main.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/aapt/Main.cpp b/tools/aapt/Main.cpp
+index d714687ee91..3484693a02c 100644
+--- a/tools/aapt/Main.cpp
++++ b/tools/aapt/Main.cpp
+@@ -284,8 +284,8 @@ int main(int argc, char* const argv[])
+     int result = 1;    // pessimistically assume an error.
+     int tolerance = 0;
+ 
+-    /* default to compression */
+-    bundle.setCompressionMethod(ZipEntry::kCompressDeflated);
++    /* default to 0 compression */
++    bundle.setCompressionMethod(ZipEntry::kCompressStored);
+ 
+     if (argc < 2) {
+         wantUsage = true;
+-- 
+2.19.1
+

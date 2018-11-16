@@ -1,0 +1,163 @@
+From 2bdf6b85565a6f8c0ce3b0a19da15f7baee3cee2 Mon Sep 17 00:00:00 2001
+From: PMS22 <prathams99@rediff.com>
+Date: Tue, 19 Jun 2018 20:49:26 +0200
+Subject: [PATCH] Add Flashlight blink on incoming calls [2/3]
+
+Adapted for crDroid by: @KillerDroid96
+
+- Thanks to @Shripal17 for suggesting list preference
+  instead of a toggle
+- Add a device specific flashlight check
+
+Change-Id: Ie513051b6436e2ff5b0bc486eb5377ce80486797
+---
+ res/values/cr_arrays.xml                      | 16 ++++++++-
+ res/values/cr_strings.xml                     |  9 ++++-
+ res/xml/crdroid_settings_notifications.xml    | 10 +++++-
+ .../settings/fragments/Notifications.java     | 36 +++++++++++++++++--
+ 4 files changed, 65 insertions(+), 6 deletions(-)
+
+diff --git a/res/values/cr_arrays.xml b/res/values/cr_arrays.xml
+index 9c9382d13..54a2ce03f 100644
+--- a/res/values/cr_arrays.xml
++++ b/res/values/cr_arrays.xml
+@@ -1979,4 +1979,18 @@
+         <item>0</item>
+         <item>1</item>
+     </string-array>
+-</resources>
++
++    <!-- Blink flashlight for incoming calls -->
++    <string-array name="flashlight_on_call_entries">
++        <item>@string/flashlight_on_call_disabled</item>
++        <item>@string/flashlight_on_call_not_dnd</item>
++        <item>@string/flashlight_on_call_dnd</item>
++        <item>@string/flashlight_on_call_always</item>
++   </string-array>
++    <string-array name="flashlight_on_call_values">
++       <item>0</item>
++       <item>1</item>
++       <item>2</item>
++       <item>3</item>
++   </string-array>
++</resources>
+\ No newline at end of file
+diff --git a/res/values/cr_strings.xml b/res/values/cr_strings.xml
+index 44a8afb9c..71163dc77 100644
+--- a/res/values/cr_strings.xml
++++ b/res/values/cr_strings.xml
+@@ -2124,4 +2124,11 @@
+     <string name="custom_seekbar_default_value">by default</string>
+     <string name="custom_seekbar_default_value_to_set">Default value: <xliff:g id="v">%s</xliff:g>\nLong tap to set</string>
+     <string name="custom_seekbar_default_value_is_set">Default value is set</string>
+-</resources>
++
++    <!-- Blink flashlight for incoming calls -->
++    <string name="flashlight_on_call_title">Blink Flashlight on call</string>
++    <string name="flashlight_on_call_disabled">Disabled</string>
++    <string name="flashlight_on_call_not_dnd">Only in ringer mode</string>
++    <string name="flashlight_on_call_dnd">Only in DND mode</string>
++    <string name="flashlight_on_call_always">Always</string>
++</resources>
+\ No newline at end of file
+diff --git a/res/xml/crdroid_settings_notifications.xml b/res/xml/crdroid_settings_notifications.xml
+index 66ff9b1d3..5b481af5d 100644
+--- a/res/xml/crdroid_settings_notifications.xml
++++ b/res/xml/crdroid_settings_notifications.xml
+@@ -26,6 +26,14 @@
+             <intent android:action="com.android.settings.action.POWER_NOTIF_CONTROLS" />
+     </PreferenceScreen>-->
+ 
++     <!-- Flashlight on Call -->
++     <ListPreference
++        android:key="flashlight_on_call"
++        android:icon="@drawable/ic_led_on"
++        android:title="@string/flashlight_on_call_title"
++        android:entries="@array/flashlight_on_call_entries"
++        android:entryValues="@array/flashlight_on_call_values" />
++
+     <com.crdroid.settings.preferences.SystemSettingSwitchPreference
+         android:key="force_expanded_notifications"
+         android:icon="@drawable/ic_expanded_notification"
+@@ -126,4 +134,4 @@
+             android:defaultValue="0"
+             android:dependency="heads_up_notifications_enabled" />
+      </PreferenceCategory>
+-</PreferenceScreen>
++</PreferenceScreen>
+\ No newline at end of file
+diff --git a/src/com/crdroid/settings/fragments/Notifications.java b/src/com/crdroid/settings/fragments/Notifications.java
+index 1f68cebea..8c45ee037 100644
+--- a/src/com/crdroid/settings/fragments/Notifications.java
++++ b/src/com/crdroid/settings/fragments/Notifications.java
+@@ -34,20 +34,23 @@ import com.android.settings.SettingsPreferenceFragment;
+ import com.android.settings.search.BaseSearchIndexProvider;
+ import com.android.settings.search.Indexable;
+ 
++import com.android.internal.util.crdroid.Utils;
+ import com.crdroid.settings.R;
+ 
+ import java.util.List;
+ import java.util.ArrayList;
+ 
+-public class Notifications extends SettingsPreferenceFragment implements Indexable {
++public class Notifications extends SettingsPreferenceFragment implements Preference.OnPreferenceChangeListener, Indexable {
+ 
+     public static final String TAG = "Notifications";
+ 
+     private static final String BATTERY_LIGHTS_PREF = "battery_lights";
+     private static final String NOTIFICATION_LIGHTS_PREF = "notification_lights";
++    private static final String FLASHLIGHT_ON_CALL = "flashlight_on_call";
+ 
+     private Preference mBatLights;
+     private Preference mNotLights;
++    private ListPreference mFlashlightOnCall;
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -70,6 +73,33 @@ public class Notifications extends SettingsPreferenceFragment implements Indexab
+                 com.android.internal.R.bool.config_intrusiveNotificationLed);
+         if (!mNotLightsSupported)
+             prefScreen.removePreference(mNotLights);
++
++        mFlashlightOnCall = (ListPreference) findPreference(FLASHLIGHT_ON_CALL);
++        Preference FlashOnCall = findPreference("flashlight_on_call");
++        int flashlightValue = Settings.System.getInt(getContentResolver(),
++                Settings.System.FLASHLIGHT_ON_CALL, 0);
++        mFlashlightOnCall.setValue(String.valueOf(flashlightValue));
++        mFlashlightOnCall.setSummary(mFlashlightOnCall.getEntry());
++        mFlashlightOnCall.setOnPreferenceChangeListener(this);
++        if (!Utils.deviceSupportsFlashLight(getActivity())) {
++            prefScreen.removePreference(FlashOnCall);
++        }
++    }
++     @Override
++    public void onResume() {
++        super.onResume();
++    }
++     @Override
++    public boolean onPreferenceChange(Preference preference, Object objValue) {
++        if (preference == mFlashlightOnCall) {
++            int flashlightValue = Integer.parseInt(((String) objValue).toString());
++            Settings.System.putInt(getContentResolver(),
++                  Settings.System.FLASHLIGHT_ON_CALL, flashlightValue);
++            mFlashlightOnCall.setValue(String.valueOf(flashlightValue));
++            mFlashlightOnCall.setSummary(mFlashlightOnCall.getEntry());
++            return true;
++        }
++        return false;
+     }
+ 
+     public static void reset(Context mContext) {
+@@ -105,5 +135,5 @@ public class Notifications extends SettingsPreferenceFragment implements Indexab
+ 
+                     return result;
+                 }
+-            };
+-}
++        };
++}
+\ No newline at end of file
+-- 
+2.19.1
+

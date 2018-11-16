@@ -1,0 +1,26 @@
+From 0db9e6aa55f94a1e2192d60279dcd6595183cd3a Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:01:55 -0600
+Subject: [PATCH 08/11] Enable long press power for torch by default
+
+Change-Id: I828425228e29a172f37892bcbe491ff59843aeea
+---
+ res/xml/crdroid_settings_button.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_button.xml b/res/xml/crdroid_settings_button.xml
+index d757543fb..b32675711 100644
+--- a/res/xml/crdroid_settings_button.xml
++++ b/res/xml/crdroid_settings_button.xml
+@@ -71,7 +71,7 @@
+             android:icon="@drawable/ic_flashlight"
+             android:title="@string/torch_long_press_power_gesture_title"
+             android:summary="@string/torch_long_press_power_gesture_desc"
+-            android:defaultValue="false"
++            android:defaultValue="true"
+             lineage:requiresConfig="@*android:bool/config_supportLongPressPowerWhenNonInteractive" />
+ 
+         <ListPreference
+-- 
+2.19.1
+

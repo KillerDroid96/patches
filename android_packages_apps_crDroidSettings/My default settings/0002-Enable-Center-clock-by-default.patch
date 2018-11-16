@@ -1,0 +1,26 @@
+From f2c593bf88fccaf3f97bcc8a89f100cd7f24ce9d Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:35:05 -0600
+Subject: [PATCH 02/11] Enable Center clock by default
+
+Change-Id: I3a3686a7e78e4c545207d15c407ed6c7575f08a0
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index 422dee396..c45813764 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -39,7 +39,7 @@
+             android:dialogTitle="@string/status_bar_clock_position_title"
+             android:entries="@array/status_bar_clock_position_entries"
+             android:entryValues="@array/status_bar_clock_position_values"
+-            android:defaultValue="2" />
++            android:defaultValue="1" />
+ 
+         <PreferenceScreen
+             android:key="clock"
+-- 
+2.19.1
+

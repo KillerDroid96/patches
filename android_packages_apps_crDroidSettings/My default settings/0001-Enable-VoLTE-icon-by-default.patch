@@ -1,0 +1,26 @@
+From d36a19c2d20afb602b27fa67fef1138216ab9c45 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:28:05 -0600
+Subject: [PATCH 01/11] Enable VoLTE icon by default
+
+Change-Id: I6b4f7130f36b9cf22fe2e14e3e26a637f57d5f14
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index d4b47dc1a..422dee396 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -115,7 +115,7 @@
+             android:icon="@drawable/ic_volte"
+             android:title="@string/volte_icon_title"
+             android:summary="@string/volte_icon_summary"
+-            android:defaultValue="false"/>
++            android:defaultValue="true"/>
+ 
+         <!--<cyanogenmod.preference.CMSystemSettingSwitchPreference
+             android:key="status_bar_notif_count"
+-- 
+2.19.1
+

@@ -1,0 +1,186 @@
+From 9c995519a1824cf35fa78cc1d31d6bc24d7bc715 Mon Sep 17 00:00:00 2001
+From: Shripal17 <shripal17@gmail.com>
+Date: Tue, 5 Jun 2018 15:54:20 +0000
+Subject: [PATCH] Telecomm: Add Flashlight blink on incoming calls [3/3]
+
+- Add 4 different cases disabled, ringer, dnd mode and always on.
+- Add a delay of 500ms for making it blink faster
+
+- Thanks to @PMS22 for helping
+
+Change-Id: Iec1ea643f01cb5640a4f61203520bbd63b2810bd
+Signed-off-by: PMS22 <prathams99@rediff.com>
+---
+ AndroidManifest.xml                        |  3 +
+ src/com/android/server/telecom/Ringer.java | 79 +++++++++++++++++++++-
+ 2 files changed, 81 insertions(+), 1 deletion(-)
+
+diff --git a/AndroidManifest.xml b/AndroidManifest.xml
+index ab18b8ef..a08f61fc 100644
+--- a/AndroidManifest.xml
++++ b/AndroidManifest.xml
+@@ -48,6 +48,7 @@
+     <uses-permission android:name="android.permission.READ_BLOCKED_NUMBERS" />
+     <uses-permission android:name="android.permission.WRITE_BLOCKED_NUMBERS" />
+     <uses-permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
++    <uses-permission android:name="android.permission.CAMERA" />
+ 
+     <permission
+             android:name="android.permission.BROADCAST_CALLLOG_INFO"
+@@ -69,6 +70,8 @@
+             android:label="Process phone account registration"
+             android:protectionLevel="signature|system"/>
+ 
++    <uses-feature android:name="android.hardware.camera" />
++
+     <application android:label="@string/telecommAppLabel"
+             android:icon="@mipmap/ic_launcher"
+             android:allowBackup="false"
+diff --git a/src/com/android/server/telecom/Ringer.java b/src/com/android/server/telecom/Ringer.java
+index fe74dc76..10f1fce9 100644
+--- a/src/com/android/server/telecom/Ringer.java
++++ b/src/com/android/server/telecom/Ringer.java
+@@ -16,6 +16,9 @@
+ 
+ package com.android.server.telecom;
+ 
++import android.content.pm.PackageManager;
++import android.hardware.camera2.CameraManager;
++import android.os.AsyncTask;
+ import android.app.Notification;
+ import android.app.NotificationManager;
+ import android.app.Person;
+@@ -29,7 +32,9 @@ import android.media.AudioManager;
+ import android.media.Ringtone;
+ import android.net.Uri;
+ import android.os.Bundle;
++import android.os.UserHandle;
+ import android.os.Vibrator;
++import android.provider.Settings;
+ 
+ import com.android.internal.annotations.VisibleForTesting;
+ 
+@@ -93,6 +98,8 @@ public class Ringer {
+     private final Vibrator mVibrator;
+     private final InCallController mInCallController;
+ 
++    private TorchToggler torchToggler;
++
+     private InCallTonePlayer mCallWaitingPlayer;
+     private RingtoneFactory mRingtoneFactory;
+ 
+@@ -109,6 +116,8 @@ public class Ringer {
+      */
+     private boolean mIsVibrating = false;
+ 
++    private int torchMode;
++
+     /** Initializes the Ringer. */
+     @VisibleForTesting
+     public Ringer(
+@@ -130,6 +139,8 @@ public class Ringer {
+         mRingtoneFactory = ringtoneFactory;
+         mInCallController = inCallController;
+ 
++        torchToggler = new TorchToggler(context);
++
+         if (mContext.getResources().getBoolean(R.bool.use_simple_vibration_pattern)) {
+             mDefaultVibrationEffect = VibrationEffect.createWaveform(SIMPLE_VIBRATION_PATTERN,
+                     SIMPLE_VIBRATION_AMPLITUDE, REPEAT_SIMPLE_VIBRATION_AT);
+@@ -210,6 +221,17 @@ public class Ringer {
+             effect = mDefaultVibrationEffect;
+         }
+ 
++        boolean dndMode = !isRingerAudible;
++        torchMode = Settings.System.getIntForUser(mContext.getContentResolver(),
++                 Settings.System.FLASHLIGHT_ON_CALL, 0, UserHandle.USER_CURRENT);
++
++        boolean shouldFlash = (torchMode == 1 && !dndMode) ||
++                              (torchMode == 2 && dndMode)  ||
++                               torchMode == 3;
++        if (shouldFlash) {
++            blinkFlashlight();
++        }
++
+         if (shouldVibrate(mContext, foregroundCall) && !mIsVibrating && shouldRingForContact) {
+             mVibrator.vibrate(effect, VIBRATION_ATTRIBUTES);
+             mIsVibrating = true;
+@@ -220,6 +242,11 @@ public class Ringer {
+         return shouldAcquireAudioFocus;
+     }
+ 
++    private void blinkFlashlight() {
++        torchToggler = new TorchToggler(mContext);
++        torchToggler.execute();
++    }
++
+     private VibrationEffect getVibrationEffectForCall(RingtoneFactory factory, Call call) {
+         VibrationEffect effect = null;
+         Ringtone ringtone = factory.getRingtone(call);
+@@ -269,6 +296,7 @@ public class Ringer {
+         }
+ 
+         mRingtonePlayer.stop();
++        torchToggler.stop();
+ 
+         if (mIsVibrating) {
+             Log.addEvent(mVibratingCall, LogUtils.Events.STOP_VIBRATOR);
+@@ -345,4 +373,53 @@ public class Ringer {
+         }
+         return mSystemSettingsUtil.canVibrateWhenRinging(context);
+     }
+-}
++
++    public void vibrate(int v1, int p1, int v2) {
++        long[] pattern = new long[] {
++            0, v1, p1, v2
++        };
++        ((Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE)).vibrate(pattern, -1);
++    }
++
++    private class TorchToggler extends AsyncTask {
++
++        private boolean shouldStop = false;
++        private CameraManager cameraManager;
++        private int duration = 500;
++        private boolean hasFlash = true;
++        private Context context;
++
++        public TorchToggler(Context ctx) {
++            this.context = ctx;
++            init();
++        }
++
++        private void init() {
++            cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
++            hasFlash = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
++        }
++
++        void stop() {
++            shouldStop = true;
++        }
++
++        @Override
++        protected Object doInBackground(Object[] objects) {
++            if (hasFlash) {
++                try {
++                    String cameraId = cameraManager.getCameraIdList()[0];
++                    while (!shouldStop) {
++                        cameraManager.setTorchMode(cameraId, true);
++                        Thread.sleep(duration);
++
++                        cameraManager.setTorchMode(cameraId, false);
++                        Thread.sleep(duration);
++                    }
++                } catch (Exception e) {
++                    e.printStackTrace();
++                }
++            }
++            return null;
++        }
++    }
++}
+\ No newline at end of file
+-- 
+2.19.1
+

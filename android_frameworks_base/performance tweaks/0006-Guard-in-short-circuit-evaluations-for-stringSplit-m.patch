@@ -1,0 +1,43 @@
+From 8d138358bc4f68968758bffad50b9397220ed34e Mon Sep 17 00:00:00 2001
+From: Mohammed Irfan <mohammedirfan1992@hotmail.com>
+Date: Tue, 21 Jul 2015 04:34:04 -0400
+Subject: [PATCH 06/17] Guard in short-circuit evaluations for stringSplit
+ methods.
+
+* splitRange function should also check if string is empty instead of
+  just checking for null, as a faulty camera can return
+  an empty RangeLength string.
+* See (stripped) logcat: http://pastebin.com/kVV3ZJhz
+
+Change-Id: Icbb8f12d1c2511366856889edc9b2060b764f2d0
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/hardware/Camera.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
+index 0f007ea1697..b4ab1130b63 100644
+--- a/core/java/android/hardware/Camera.java
++++ b/core/java/android/hardware/Camera.java
+@@ -4868,7 +4868,7 @@ public class Camera {
+         // Example string: "(10000,26623),(10000,30000)". Return null if the
+         // passing string is null or the size is 0.
+         private ArrayList<int[]> splitRange(String str) {
+-            if (str == null || str.charAt(0) != '('
++            if (str == null || str.isEmpty() || str.charAt(0) != '('
+                     || str.charAt(str.length() - 1) != ')') {
+                 Log.e(TAG, "Invalid range list string=" + str);
+                 return null;
+@@ -4893,7 +4893,7 @@ public class Camera {
+         // Example string: "(-10,-10,0,0,300),(0,0,10,10,700)". Return null if
+         // the passing string is null or the size is 0 or (0,0,0,0,0).
+         private ArrayList<Area> splitArea(String str) {
+-            if (str == null || str.charAt(0) != '('
++            if (str == null || str.isEmpty() || str.charAt(0) != '('
+                     || str.charAt(str.length() - 1) != ')') {
+                 Log.e(TAG, "Invalid area string=" + str);
+                 return null;
+-- 
+2.19.1
+

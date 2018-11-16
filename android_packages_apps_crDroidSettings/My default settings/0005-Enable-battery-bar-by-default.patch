@@ -1,0 +1,35 @@
+From 26979cb170305f2ae3e080d32aee54950c72a069 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:50:02 -0600
+Subject: [PATCH 05/11] Enable battery bar by default
+
+Change-Id: Ib5a6ac80aaba37aab9aad023310cfb0399416c5f
+---
+ res/xml/battery_bar.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/res/xml/battery_bar.xml b/res/xml/battery_bar.xml
+index 2b0f345c2..959ac2033 100644
+--- a/res/xml/battery_bar.xml
++++ b/res/xml/battery_bar.xml
+@@ -28,7 +28,7 @@
+     <SwitchPreference
+         android:key="statusbar_battery_bar"
+         android:title="@string/battery_bar_title"
+-        android:defaultValue="false" />
++        android:defaultValue="true" />
+ 
+     <com.crdroid.settings.preferences.CustomSeekBarPreference
+         android:key="statusbar_battery_bar_thickness"
+@@ -82,7 +82,7 @@
+     <com.crdroid.settings.preferences.SystemSettingSwitchPreference
+         android:key="statusbar_battery_bar_enable_charging_color"
+         android:title="@string/battery_bar_use_charging_color"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:dependency="statusbar_battery_bar" />
+ 
+     <com.crdroid.settings.preferences.colorpicker.ColorPickerPreference
+-- 
+2.19.1
+

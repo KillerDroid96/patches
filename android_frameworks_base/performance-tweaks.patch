@@ -1,0 +1,1138 @@
+From 5edb4174d468b8cb343c8adafddb90a87db50810 Mon Sep 17 00:00:00 2001
+From: Jun Su <juns@nvidia.com>
+Date: Sun, 19 Jan 2014 12:43:58 +0800
+Subject: [PATCH 01/17] Disable statusbar time refresh when screen off
+
+When screen is off, don't refresh the status bar to save power.
+When screen is on, refresh immediately for user experience.
+
+PS: (updateClock(); => getHandler().post(() -> updateClock());)
+updated for android 8.0
+
+Change-Id: Ie250e20bab57c096a16886680a53263c635bf6f4
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../android/systemui/statusbar/policy/Clock.java   | 14 +++++++++++++-
+ .../systemui/statusbar/policy/DateView.java        | 13 ++++++++++++-
+ 2 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
+index 872b8865a4e..d53029160a3 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
+@@ -79,6 +79,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+     private SimpleDateFormat mClockFormat;
+     private SimpleDateFormat mContentDescriptionFormat;
+     private Locale mLocale;
++    private boolean mScreenOn = true;
+ 
+     private static final int AM_PM_STYLE_NORMAL  = 0;
+     private static final int AM_PM_STYLE_SMALL   = 1;
+@@ -170,6 +171,8 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+             filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+             filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
+             filter.addAction(Intent.ACTION_USER_SWITCHED);
++            filter.addAction(Intent.ACTION_SCREEN_ON);
++            filter.addAction(Intent.ACTION_SCREEN_OFF);
+ 
+             getContext().registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter,
+                     null, Dependency.get(Dependency.TIME_TICK_HANDLER));
+@@ -242,7 +245,16 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+                     return;
+                 });
+             }
+-            getHandler().post(() -> updateClock());
++
++            if (action.equals(Intent.ACTION_SCREEN_ON)) {
++                mScreenOn = true;
++            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
++                mScreenOn = false;
++            }
++
++            if (mScreenOn) {
++                getHandler().post(() -> updateClock());
++            }
+         }
+     };
+ 
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
+index dcce77c7c35..e1f523fcf2c 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
+@@ -42,11 +42,18 @@ public class DateView extends TextView {
+     private DateFormat mDateFormat;
+     private String mLastText;
+     private String mDatePattern;
++    private boolean mScreenOn = true;
+ 
+     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             final String action = intent.getAction();
++            if (action.equals(Intent.ACTION_SCREEN_ON)) {
++                mScreenOn = true;
++            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
++                mScreenOn = false;
++            }
++
+             if (Intent.ACTION_TIME_TICK.equals(action)
+                     || Intent.ACTION_TIME_CHANGED.equals(action)
+                     || Intent.ACTION_TIMEZONE_CHANGED.equals(action)
+@@ -56,7 +63,9 @@ public class DateView extends TextView {
+                     // need to get a fresh date format
+                     getHandler().post(() -> mDateFormat = null);
+                 }
+-                getHandler().post(() -> updateClock());
++                if (mScreenOn) {
++                    getHandler().post(() -> updateClock());
++                }
+             }
+         }
+     };
+@@ -83,6 +92,8 @@ public class DateView extends TextView {
+         super.onAttachedToWindow();
+ 
+         IntentFilter filter = new IntentFilter();
++        filter.addAction(Intent.ACTION_SCREEN_ON);
++        filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_TIME_TICK);
+         filter.addAction(Intent.ACTION_TIME_CHANGED);
+         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+-- 
+2.19.1
+
+
+From 6749850c0206bd70755886c2587f74117fac59e2 Mon Sep 17 00:00:00 2001
+From: Jorge Ruesga <jorge@ruesga.com>
+Date: Sun, 8 Jun 2014 00:33:48 +0200
+Subject: [PATCH 02/17] AppOps: Do not prune apps that are not present
+
+Do not prune apps that are not currently present in the device (like
+USB memory ones). While booting, they are not available but must not
+be purged from AppOps, because they are still present in the Android
+app database.
+
+Issue-Id: CYAN-2811
+Change-Id: I6680cbdf0022812b45d966dffee754399e92accb
+Signed-off-by: Jorge Ruesga <jorge@ruesga.com>
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../java/com/android/server/AppOpsService.java    | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/services/core/java/com/android/server/AppOpsService.java b/services/core/java/com/android/server/AppOpsService.java
+index 786d757557d..fae771941c1 100644
+--- a/services/core/java/com/android/server/AppOpsService.java
++++ b/services/core/java/com/android/server/AppOpsService.java
+@@ -619,10 +619,17 @@ public class AppOpsService extends IAppOpsService.Stub {
+                     } catch (RemoteException ignored) {
+                     }
+                     if (curUid != ops.uidState.uid) {
+-                        Slog.i(TAG, "Pruning old package " + ops.packageName
+-                                + "/" + ops.uidState + ": new uid=" + curUid);
+-                        it.remove();
+-                        changed = true;
++                        // Do not prune apps that are not currently present in the device
++                        // (like SDcard ones). While booting, SDcards are not available but
++                        // must not be purged from AppOps, because they are still present
++                        // in the Android app database.
++                        String pkgName = mContext.getPackageManager().getNameForUid(ops.uidState.uid);
++                        if (curUid != -1 || pkgName == null || !pkgName.equals(ops.packageName)) {
++                            Slog.i(TAG, "Pruning old package " + ops.packageName
++                                    + "/" + ops.uidState + ": new uid=" + curUid);
++                            it.remove();
++                            changed = true;
++                        }
+                     }
+                 }
+ 
+-- 
+2.19.1
+
+
+From abc64b76025ae99c573ebc4a8f373ad4eb3572e0 Mon Sep 17 00:00:00 2001
+From: Chet Kener <Cl3Kener@gmail.com>
+Date: Wed, 17 Dec 2014 22:24:04 -0700
+Subject: [PATCH 03/17] Let's cut Max Excape Animation in Half
+
+Change-Id: I5a7740a0297d486acd912d001f9ae92cd48ade5b
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ packages/SystemUI/src/com/android/systemui/SwipeHelper.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/SwipeHelper.java b/packages/SystemUI/src/com/android/systemui/SwipeHelper.java
+index 22b66730cb6..e25040886b0 100644
+--- a/packages/SystemUI/src/com/android/systemui/SwipeHelper.java
++++ b/packages/SystemUI/src/com/android/systemui/SwipeHelper.java
+@@ -386,7 +386,7 @@ public class SwipeHelper implements Gefingerpoken {
+             duration = MAX_ESCAPE_ANIMATION_DURATION;
+             if (velocity != 0) {
+                 duration = Math.min(duration,
+-                        (int) (Math.abs(newPos - getTranslation(animView)) * 1000f / Math
++                        (int) (Math.abs(newPos - getTranslation(animView)) * 500f / Math
+                                 .abs(velocity))
+                 );
+             } else {
+-- 
+2.19.1
+
+
+From 6e3d96fa28f1f9fd45c24b64b37c676d49af03c8 Mon Sep 17 00:00:00 2001
+From: Maxime Poulain <maxime.poulain@student.uclouvain.be>
+Date: Thu, 19 Mar 2015 23:19:11 +0100
+Subject: [PATCH 04/17] lowered animations duration
+
+Change-Id: Idbdaca8469d69fb0d2ddcec4f672dedb8add467d
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ packages/SettingsProvider/res/values/defaults.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/packages/SettingsProvider/res/values/defaults.xml b/packages/SettingsProvider/res/values/defaults.xml
+index a94709de717..7dce730fff1 100644
+--- a/packages/SettingsProvider/res/values/defaults.xml
++++ b/packages/SettingsProvider/res/values/defaults.xml
+@@ -32,8 +32,8 @@
+     <!-- Default screen brightness, from 0 to 255.  102 is 40%. -->
+     <integer name="def_screen_brightness">102</integer>
+     <bool name="def_screen_brightness_automatic_mode">false</bool>
+-    <fraction name="def_window_animation_scale">100%</fraction>
+-    <fraction name="def_window_transition_scale">100%</fraction>
++    <fraction name="def_window_animation_scale">25%</fraction>
++    <fraction name="def_window_transition_scale">25%</fraction>
+     <bool name="def_haptic_feedback">true</bool>
+ 
+     <bool name="def_bluetooth_on">true</bool>
+-- 
+2.19.1
+
+
+From 8f5e8cfbc6562f8a0bb5d67968099307a2d68f87 Mon Sep 17 00:00:00 2001
+From: arter97 <qkrwngud825@gmail.com>
+Date: Tue, 7 Apr 2015 18:46:33 +0900
+Subject: [PATCH 05/17] aapt: Default to 0 compression ratio
+
+Modern devices now has a blazing fast NAND that storage speed is not the bottle-neck when it comes to reading apks.
+
+So use 0 compression ratio for improving speed and memory usage.
+
+Change-Id: I20820ed514eddb02164df5d65e870a80f9332172
+Signed-off-by: arter97 <qkrwngud825@gmail.com>
+Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ tools/aapt/Main.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/aapt/Main.cpp b/tools/aapt/Main.cpp
+index d714687ee91..3484693a02c 100644
+--- a/tools/aapt/Main.cpp
++++ b/tools/aapt/Main.cpp
+@@ -284,8 +284,8 @@ int main(int argc, char* const argv[])
+     int result = 1;    // pessimistically assume an error.
+     int tolerance = 0;
+ 
+-    /* default to compression */
+-    bundle.setCompressionMethod(ZipEntry::kCompressDeflated);
++    /* default to 0 compression */
++    bundle.setCompressionMethod(ZipEntry::kCompressStored);
+ 
+     if (argc < 2) {
+         wantUsage = true;
+-- 
+2.19.1
+
+
+From 8d138358bc4f68968758bffad50b9397220ed34e Mon Sep 17 00:00:00 2001
+From: Mohammed Irfan <mohammedirfan1992@hotmail.com>
+Date: Tue, 21 Jul 2015 04:34:04 -0400
+Subject: [PATCH 06/17] Guard in short-circuit evaluations for stringSplit
+ methods.
+
+* splitRange function should also check if string is empty instead of
+  just checking for null, as a faulty camera can return
+  an empty RangeLength string.
+* See (stripped) logcat: http://pastebin.com/kVV3ZJhz
+
+Change-Id: Icbb8f12d1c2511366856889edc9b2060b764f2d0
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/hardware/Camera.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
+index 0f007ea1697..b4ab1130b63 100644
+--- a/core/java/android/hardware/Camera.java
++++ b/core/java/android/hardware/Camera.java
+@@ -4868,7 +4868,7 @@ public class Camera {
+         // Example string: "(10000,26623),(10000,30000)". Return null if the
+         // passing string is null or the size is 0.
+         private ArrayList<int[]> splitRange(String str) {
+-            if (str == null || str.charAt(0) != '('
++            if (str == null || str.isEmpty() || str.charAt(0) != '('
+                     || str.charAt(str.length() - 1) != ')') {
+                 Log.e(TAG, "Invalid range list string=" + str);
+                 return null;
+@@ -4893,7 +4893,7 @@ public class Camera {
+         // Example string: "(-10,-10,0,0,300),(0,0,10,10,700)". Return null if
+         // the passing string is null or the size is 0 or (0,0,0,0,0).
+         private ArrayList<Area> splitArea(String str) {
+-            if (str == null || str.charAt(0) != '('
++            if (str == null || str.isEmpty() || str.charAt(0) != '('
+                     || str.charAt(str.length() - 1) != ')') {
+                 Log.e(TAG, "Invalid area string=" + str);
+                 return null;
+-- 
+2.19.1
+
+
+From 6f071f3ae4f3d6bdf0a8a045a9f294a289f643f6 Mon Sep 17 00:00:00 2001
+From: Steve Kondik <steve@cyngn.com>
+Date: Wed, 27 Jul 2016 17:36:47 -0700
+Subject: [PATCH 07/17] MountService: Unmount internal storage before
+ restarting framework
+
+This is a squash of the following two commits that have been
+binderized to work on P.
+
+mountservice: Shut down volumes before restarting framework
+
+ * Vold assumes that when FUSE is killed, the mount is gone. This
+   isn't true with sdcardfs, since the daemon doesn't continue
+   to run. Cryptfs was assuming this behavior, and the system would
+   hang during decryption since the emulated storage doesn't get
+   unmounted.
+ * Send the shutdown command before committing suicide.
+
+mountservice: Don't nuke all volumes when decrypting
+
+ * Instead, just unmount the emulated internal volume since
+   it's the only one which can prevent cryptfs from restarting.
+
+Change-Id: Iac4bc8d2b7ce0a4cacafb19e4edda84e4b752f29
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../core/java/com/android/server/StorageManagerService.java | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/services/core/java/com/android/server/StorageManagerService.java b/services/core/java/com/android/server/StorageManagerService.java
+index 85b4ea6f639..a0d530bb1ef 100644
+--- a/services/core/java/com/android/server/StorageManagerService.java
++++ b/services/core/java/com/android/server/StorageManagerService.java
+@@ -2249,6 +2249,12 @@ class StorageManagerService extends IStorageManager.Stub
+         try {
+             mVold.fdeCheckPassword(password);
+             mHandler.postDelayed(() -> {
++                // unmount the internal emulated volume first
++                try {
++                    mVold.unmount(findVolumeByIdOrThrow("emulated").id);
++                } catch (Exception e) {
++                    Slog.e(TAG, "unable to shut down internal volume", e);
++                }
+                 try {
+                     mVold.fdeRestart();
+                 } catch (Exception e) {
+-- 
+2.19.1
+
+
+From 8fe78bf23a82550eeb4cfd9e5dfc4984ec5b7fc3 Mon Sep 17 00:00:00 2001
+From: yangbingqian <bqyang720@gmail.com>
+Date: Thu, 9 Mar 2017 23:07:48 +0800
+Subject: [PATCH 08/17] Clean receivers completely when forceStop the process
+
+when forceStop is called, then the broadcast-receiver will be
+cleaned up.However, only receivers of the userId is cleaned.
+When the userId is not UserHandle.USER_ALL and the userId of
+BroadcastRecord is UserHandle.USER_ALL. Then the receiver of
+this BR will not be cleaned up. Thus the receiver of this
+process with this userId will be dispatched. What's worse, it
+may cause severe problems under multi-user
+
+It should be conflict with the intention of forceStop method
+
+https://code.google.com/p/android/issues/detail?id=259998
+
+Test: am broadcast -a xxx --user, and then force stop the
+process responded to action xxx, if this broadcast is stucked
+for a while. the process will be started
+
+Change-Id: I38ef4116e16c97f257da37bc08e5ef3f64eff7ef
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../core/java/com/android/server/am/BroadcastRecord.java | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/services/core/java/com/android/server/am/BroadcastRecord.java b/services/core/java/com/android/server/am/BroadcastRecord.java
+index 574ca4a340e..e64cbc87abf 100644
+--- a/services/core/java/com/android/server/am/BroadcastRecord.java
++++ b/services/core/java/com/android/server/am/BroadcastRecord.java
+@@ -300,7 +300,9 @@ final class BroadcastRecord extends Binder {
+ 
+     boolean cleanupDisabledPackageReceiversLocked(
+             String packageName, Set<String> filterByClasses, int userId, boolean doit) {
+-        if ((userId != UserHandle.USER_ALL && this.userId != userId) || receivers == null) {
++        final boolean cleanUpAllUser = userId == UserHandle.USER_ALL;
++        final boolean sendToAllUser = this.userId == UserHandle.USER_ALL;
++        if ((!cleanUpAllUser && !sendToAllUser && this.userId != userId) || receivers == null) {
+             return false;
+         }
+ 
+@@ -316,7 +318,10 @@ final class BroadcastRecord extends Binder {
+             final boolean sameComponent = packageName == null
+                     || (info.applicationInfo.packageName.equals(packageName)
+                     && (filterByClasses == null || filterByClasses.contains(info.name)));
+-            if (sameComponent) {
++            final boolean sameUser = cleanUpAllUser
++                    || UserHandle.getUserId(info.applicationInfo.uid) == userId;
++
++            if (sameComponent && sameUser) {
+                 if (!doit) {
+                     return true;
+                 }
+-- 
+2.19.1
+
+
+From 8093cc049689624ce53895310aca23c04de5c38c Mon Sep 17 00:00:00 2001
+From: Alex Naidis <alex.naidis@linux.com>
+Date: Thu, 16 Mar 2017 14:59:53 +0100
+Subject: [PATCH 09/17] ViewConfiguration: Set scroll friction to 0.012
+
+Reduce scroll friction to a better default
+value which is used in Scroller and Overscroller.
+
+Change-Id: I66a7663a18bb80263c51f3d54a2bb1e3fe5d0b4d
+Signed-off-by: Adin Kwok <adin.kwok@carbonrom.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/view/ViewConfiguration.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/java/android/view/ViewConfiguration.java b/core/java/android/view/ViewConfiguration.java
+index 8f639f70f32..01f3bfd73be 100644
+--- a/core/java/android/view/ViewConfiguration.java
++++ b/core/java/android/view/ViewConfiguration.java
+@@ -224,7 +224,7 @@ public class ViewConfiguration {
+     /**
+      * The coefficient of friction applied to flings/scrolls.
+      */
+-    private static final float SCROLL_FRICTION = 0.007f;
++    private static final float SCROLL_FRICTION = 0.012f;
+ 
+     /**
+      * Max distance in dips to overscroll for edge effects
+-- 
+2.19.1
+
+
+From 687d1a67d81a7b9555fc0711ba4e26b943fcaafb Mon Sep 17 00:00:00 2001
+From: Danny Baumann <dannybaumann@web.de>
+Date: Fri, 14 Nov 2014 09:44:49 -0800
+Subject: [PATCH 10/17] Factor out preference-in-storage check to overridable
+ method.
+
+Change-Id: I2fff3192802f8a180330fda66388eda394334a5a
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/preference/Preference.java | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/core/java/android/preference/Preference.java b/core/java/android/preference/Preference.java
+index 4306bc47f2b..0832163d756 100644
+--- a/core/java/android/preference/Preference.java
++++ b/core/java/android/preference/Preference.java
+@@ -1544,6 +1544,14 @@ public class Preference implements Comparable<Preference> {
+         mDefaultValue = defaultValue;
+     }
+ 
++    /**
++     * Returns whether the preference can be found in persistent storage
++     * @hide
++     */
++    protected boolean isPersisted() {
++        return getSharedPreferences().contains(mKey);
++    }
++
+     private void dispatchSetInitialValue() {
+         if (getPreferenceDataStore() != null) {
+             onSetInitialValue(true, mDefaultValue);
+@@ -1552,7 +1560,7 @@ public class Preference implements Comparable<Preference> {
+ 
+         // By now, we know if we are persistent.
+         final boolean shouldPersist = shouldPersist();
+-        if (!shouldPersist || !getSharedPreferences().contains(mKey)) {
++        if (!shouldPersist || !isPersisted()) {
+             if (mDefaultValue != null) {
+                 onSetInitialValue(false, mDefaultValue);
+             }
+-- 
+2.19.1
+
+
+From b3e20af1825dd9564532d89b7bd866ddeda17f28 Mon Sep 17 00:00:00 2001
+From: Sultanxda <sultanxda@gmail.com>
+Date: Sat, 15 Apr 2017 17:43:52 -0700
+Subject: [PATCH 11/17] Speed up wake-and-unlock scenario
+
+  * Directly dismiss keyguard instead of using a fade-out animation
+  * Skip virtual navigation button animation on wake
+
+@xyyx: adapted to O
+frap129: Adapted to P
+
+Change-Id: Ife32ac107dd9fc11bcee5ac5bc821fe91ad063a6
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../systemui/keyguard/KeyguardViewMediator.java     |  7 ++++++-
+ .../phone/FingerprintUnlockController.java          |  1 +
+ .../systemui/statusbar/phone/NavigationBarView.java |  2 +-
+ .../android/systemui/statusbar/phone/StatusBar.java |  7 ++++---
+ .../phone/StatusBarKeyguardViewManager.java         | 13 +++++++++++++
+ 5 files changed, 25 insertions(+), 5 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java b/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java
+index 402d393b35d..19f4393908f 100644
+--- a/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java
++++ b/packages/SystemUI/src/com/android/systemui/keyguard/KeyguardViewMediator.java
+@@ -1918,10 +1918,15 @@ public class KeyguardViewMediator extends SystemUI {
+                 playSounds(false);
+             }
+ 
++            boolean wakeAndUnlocking = mWakeAndUnlocking;
+             mWakeAndUnlocking = false;
+             setShowingLocked(false, mAodShowing);
+             mDismissCallbackRegistry.notifyDismissSucceeded();
+-            mStatusBarKeyguardViewManager.hide(startTime, fadeoutDuration);
++            if (wakeAndUnlocking) {
++                mStatusBarKeyguardViewManager.hideNoAnimation();
++            } else {
++                mStatusBarKeyguardViewManager.hide(startTime, fadeoutDuration);
++            }
+             resetKeyguardDonePendingLocked();
+             mHideAnimationRun = false;
+             adjustStatusBarLocked();
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/FingerprintUnlockController.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/FingerprintUnlockController.java
+index 7cb6a192c64..3b1900eece0 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/FingerprintUnlockController.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/FingerprintUnlockController.java
+@@ -278,6 +278,7 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
+             case MODE_NONE:
+                 break;
+         }
++
+         mStatusBar.notifyFpAuthModeChanged();
+         Trace.endSection();
+     }
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+index c0d9ff71e94..bf5a0897dd7 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java
+@@ -712,7 +712,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
+     }
+ 
+     public void setWakeAndUnlocking(boolean wakeAndUnlocking) {
+-        setUseFadingAnimations(wakeAndUnlocking);
++        setUseFadingAnimations(!wakeAndUnlocking);
+         mWakeAndUnlocking = wakeAndUnlocking;
+         updateLayoutTransitionsEnabled();
+     }
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index 34759e25795..81c6a33f8ab 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -1893,9 +1893,10 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+                     Log.v(TAG, "DEBUG_MEDIA: Fading out album artwork");
+                 }
+                 boolean cannotAnimateDoze = mDozing && !ScrimState.AOD.getAnimateChange();
+-                if (mFingerprintUnlockController.getMode()
+-                        == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK_PULSING
+-                        || hideBecauseOccluded || cannotAnimateDoze) {
++                int fpMode = mFingerprintUnlockController.getMode();
++                if (fpMode == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK_PULSING ||
++                        fpMode == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK ||
++                        hideBecauseOccluded || cannotAnimateDoze) {
+ 
+                     // We are unlocking directly - no animation!
+                     mBackdrop.setVisibility(View.GONE);
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarKeyguardViewManager.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarKeyguardViewManager.java
+index d99b4eb0115..02dd93fc511 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarKeyguardViewManager.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarKeyguardViewManager.java
+@@ -515,7 +515,20 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
+         mFingerprintUnlockController.finishKeyguardFadingAway();
+         WindowManagerGlobal.getInstance().trimMemory(
+                 ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
++    }
+ 
++    public void hideNoAnimation() {
++        mShowing = false;
++        mStatusBar.setKeyguardFadingAway(SystemClock.uptimeMillis(), 0, 0);
++        mStatusBar.hideKeyguard();
++        mStatusBar.finishKeyguardFadingAway();
++        mStatusBarWindowManager.setKeyguardShowing(false);
++        mBouncer.hide(true /* destroyView */);
++        mViewMediatorCallback.keyguardGone();
++        mFingerprintUnlockController.finishKeyguardFadingAway();
++        updateStates();
++        WindowManagerGlobal.getInstance().trimMemory(
++                ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+     }
+ 
+     private void wakeAndUnlockDejank() {
+-- 
+2.19.1
+
+
+From d933f07a6db754a7846add1de763c30ffa61c171 Mon Sep 17 00:00:00 2001
+From: ZeNiXxX <vitjahermann@gmail.com>
+Date: Tue, 21 Aug 2018 13:53:13 +0200
+Subject: [PATCH 12/17] Speed Up Animation & UI
+
+Speed things up to the max
+
+Change-Id: Id3ae0a2a9fcba58de031fc6e855b72356973fbcc
+
+Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
+
+android.view: Speed things up!!
+
+Speed up Orientation Listener
+
+Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
+Signed-off-by: Eliminater74 <eliminater74@gmail.com>
+-----------------------------------------------------
+
+modified and squashed by @ZeNiXxX
+speed up animation
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/res/res/values/config.xml          |  1 +
+ packages/SystemUI/res/values/config.xml | 18 +++++++++---------
+ 2 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/core/res/res/values/config.xml b/core/res/res/values/config.xml
+index c57b5c0567a..a6553479235 100644
+--- a/core/res/res/values/config.xml
++++ b/core/res/res/values/config.xml
+@@ -3278,6 +3278,7 @@
+          animations. Note that this is only a default and will be overridden by a
+          user-set value if toggled by settings so the "Transition animation scale" setting
+          should also be hidden if intended to be permanent. -->
++
+     <item name="config_appTransitionAnimationDurationScaleDefault" format="float" type="dimen">1.0</item>
+ 
+     <!-- Flag indicates that whether non-system apps can be installed on internal storage. -->
+diff --git a/packages/SystemUI/res/values/config.xml b/packages/SystemUI/res/values/config.xml
+index e860f098395..62bd8695197 100644
+--- a/packages/SystemUI/res/values/config.xml
++++ b/packages/SystemUI/res/values/config.xml
+@@ -51,7 +51,7 @@
+     <!-- Vibrator pattern for camera gesture launch. -->
+     <integer-array translatable="false" name="config_cameraLaunchGestureVibePattern">
+         <item>0</item>
+-        <item>400</item>
++        <item>80</item>
+     </integer-array>
+ 
+     <!-- How many icons may be shown at once in the system bar. Includes any
+@@ -138,8 +138,8 @@
+     <bool name="quick_settings_rssi_tile_capitalization">true</bool>
+ 
+     <!-- Timeouts for brightness dialog to disappear -->
+-    <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
+-    <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
++    <integer name="quick_settings_brightness_dialog_short_timeout">1000</integer>
++    <integer name="quick_settings_brightness_dialog_long_timeout">3000</integer>
+ 
+     <!-- Should "4G" be shown instead of "LTE" when the network is NETWORK_TYPE_LTE? -->
+     <bool name="config_show4GForLTE">true</bool>
+@@ -158,7 +158,7 @@
+     <integer name="heads_up_notification_minimum_time">2000</integer>
+ 
+     <!-- milliseconds before the heads up notification accepts touches. -->
+-    <integer name="touch_acceptance_delay">700</integer>
++    <integer name="touch_acceptance_delay">400</integer>
+ 
+     <!-- The duration in seconds to wait before the dismiss buttons are shown. -->
+     <integer name="recents_task_bar_dismiss_delay_seconds">400</integer>
+@@ -167,16 +167,16 @@
+     <integer name="recents_task_enter_from_app_duration">200</integer>
+ 
+     <!-- The duration for animating the task decorations in after transitioning from an app. -->
+-    <integer name="recents_task_enter_from_affiliated_app_duration">125</integer>
++    <integer name="recents_task_enter_from_affiliated_app_duration">75</integer>
+ 
+     <!-- The duration for animating the task decorations out before transitioning to an app. -->
+-    <integer name="recents_task_exit_to_app_duration">125</integer>
++    <integer name="recents_task_exit_to_app_duration">75</integer>
+ 
+     <!-- The min animation duration for animating the nav bar scrim in. -->
+-    <integer name="recents_nav_bar_scrim_enter_duration">400</integer>
++    <integer name="recents_nav_bar_scrim_enter_duration">100</integer>
+ 
+     <!-- The animation duration for scrolling the stack to a particular item. -->
+-    <integer name="recents_animate_task_stack_scroll_duration">200</integer>
++    <integer name="recents_animate_task_stack_scroll_duration">100</integer>
+ 
+     <!-- The delay to enforce between each alt-tab key press. -->
+     <integer name="recents_alt_tab_key_delay">200</integer>
+@@ -189,7 +189,7 @@
+     <bool name="recents_grow_in_multiwindow">true</bool>
+ 
+     <!-- Animation duration when using long press on recents to dock -->
+-    <integer name="long_press_dock_anim_duration">250</integer>
++    <integer name="long_press_dock_anim_duration">180</integer>
+ 
+     <!-- Recents: The relative range of visible tasks from the current scroll position
+          while the stack is focused. -->
+-- 
+2.19.1
+
+
+From 2dfcca9d231724bcb47b57b76dd96dad31d0baa2 Mon Sep 17 00:00:00 2001
+From: Chet Kener <Cl3Kener@gmail.com>
+Date: Tue, 6 Oct 2015 10:23:07 -0400
+Subject: [PATCH 13/17] Speed up StatusBar
+
+Change-Id: I514f093050a94923da02f4a1073b1772bd575671
+Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
+Signed-off-by: spezi77 <spezi77@gmx.com>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../com/android/systemui/statusbar/phone/StatusBar.java    | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index 81c6a33f8ab..27402f90c53 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -356,9 +356,8 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+     private static final float BRIGHTNESS_CONTROL_PADDING = 0.15f;
+     private static final int BRIGHTNESS_CONTROL_LONG_PRESS_TIMEOUT = 750; // ms
+     private static final int BRIGHTNESS_CONTROL_LINGER_THRESHOLD = 20;
+-
+-    public static final int FADE_KEYGUARD_START_DELAY = 100;
+-    public static final int FADE_KEYGUARD_DURATION = 300;
++    public static final int FADE_KEYGUARD_START_DELAY = 50;
++    public static final int FADE_KEYGUARD_DURATION = 150;
+     public static final int FADE_KEYGUARD_DURATION_PULSING = 96;
+ 
+     /** If true, the system is in the half-boot-to-decryption-screen state.
+@@ -1881,7 +1880,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+                                 + mBackdropBack.getDrawable());
+                     }
+                     mBackdropFront.animate()
+-                            .setDuration(250)
++                            .setDuration(150)
+                             .alpha(0f).withEndAction(mHideBackdropFront);
+                 }
+             }
+-- 
+2.19.1
+
+
+From 68b691c281663a8b2b0449e19790a264230fed48 Mon Sep 17 00:00:00 2001
+From: Peter Schiller <peterschiller@google.com>
+Date: Wed, 11 Nov 2015 12:54:14 -0800
+Subject: [PATCH 14/17] SystemUI: Adjusted animation timing
+
+Change-Id: I7f001abe0c97167ef9bdf83b3371b0875fd1c59f
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/res/res/anim/activity_open_enter.xml              |  4 ++--
+ core/res/res/anim/task_close_enter.xml                 | 10 +++++-----
+ core/res/res/anim/task_close_exit.xml                  | 10 +++++-----
+ core/res/res/anim/task_open_enter.xml                  | 10 +++++-----
+ core/res/res/anim/task_open_exit.xml                   | 10 +++++-----
+ .../statusbar/phone/NotificationPanelView.java         |  2 +-
+ .../android/systemui/statusbar/phone/PanelView.java    |  9 +++++++++
+ .../android/systemui/statusbar/phone/StatusBar.java    |  2 +-
+ .../core/java/com/android/server/wm/AppTransition.java |  6 +++---
+ 9 files changed, 36 insertions(+), 27 deletions(-)
+
+diff --git a/core/res/res/anim/activity_open_enter.xml b/core/res/res/anim/activity_open_enter.xml
+index cb0307026e2..952fd51360f 100644
+--- a/core/res/res/anim/activity_open_enter.xml
++++ b/core/res/res/anim/activity_open_enter.xml
+@@ -22,7 +22,7 @@
+         android:fromYDelta="4.1%"
+         android:toYDelta="0"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="425"/>
++        android:duration="300"/>
+     <cliprect
+         android:fromLeft="0%"
+         android:fromTop="95.9%"
+@@ -33,5 +33,5 @@
+         android:toRight="100%"
+         android:toBottom="100%"
+         android:interpolator="@interpolator/fast_out_extra_slow_in"
+-        android:duration="425"/>
++        android:duration="300"/>
+ </set>
+diff --git a/core/res/res/anim/task_close_enter.xml b/core/res/res/anim/task_close_enter.xml
+index b059aa9cb28..87637125d8b 100644
+--- a/core/res/res/anim/task_close_enter.xml
++++ b/core/res/res/anim/task_close_enter.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="217"/>
++        android:duration="200"/>
+ 
+     <translate
+         android:fromXDelta="-105%"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0526"
+@@ -51,7 +51,7 @@
+         android:fillBefore="true"
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="0.95"
+@@ -65,5 +65,5 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+         android:startOffset="283"
+-        android:duration="317"/>
+-</set>
+\ No newline at end of file
++        android:duration="300"/>
++</set>
+diff --git a/core/res/res/anim/task_close_exit.xml b/core/res/res/anim/task_close_exit.xml
+index c9ade227819..0a9c340fa46 100644
+--- a/core/res/res/anim/task_close_exit.xml
++++ b/core/res/res/anim/task_close_exit.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <translate
+         android:fromXDelta="0"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0"
+@@ -51,11 +51,11 @@
+         android:pivotX="50%"
+         android:pivotY="50%"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <!-- This is needed to keep the animation running while task_open_enter completes -->
+     <alpha
+         android:fromAlpha="1.0"
+         android:toAlpha="1.0"
+-        android:duration="600"/>
+-</set>
+\ No newline at end of file
++        android:duration="500"/>
++</set>
+diff --git a/core/res/res/anim/task_open_enter.xml b/core/res/res/anim/task_open_enter.xml
+index 5c618594364..07172cb52fd 100644
+--- a/core/res/res/anim/task_open_enter.xml
++++ b/core/res/res/anim/task_open_enter.xml
+@@ -30,7 +30,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="217"/>
++        android:duration="200"/>
+ 
+     <translate
+         android:fromXDelta="105%"
+@@ -40,7 +40,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="350"/>
+ 
+     <scale
+         android:fromXScale="1.0526"
+@@ -53,7 +53,7 @@
+         android:fillBefore="true"
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="0.95"
+@@ -67,5 +67,5 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/fast_out_slow_in"
+         android:startOffset="283"
+-        android:duration="317"/>
+-</set>
+\ No newline at end of file
++        android:duration="300"/>
++</set>
+diff --git a/core/res/res/anim/task_open_exit.xml b/core/res/res/anim/task_open_exit.xml
+index 9394c577da7..3c33e398b8a 100644
+--- a/core/res/res/anim/task_open_exit.xml
++++ b/core/res/res/anim/task_open_exit.xml
+@@ -28,7 +28,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/linear"
+         android:startOffset="67"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <translate
+         android:fromXDelta="0"
+@@ -38,7 +38,7 @@
+         android:fillAfter="true"
+         android:interpolator="@interpolator/aggressive_ease"
+         android:startOffset="50"
+-        android:duration="383"/>
++        android:duration="250"/>
+ 
+     <scale
+         android:fromXScale="1.0"
+@@ -51,11 +51,11 @@
+         android:pivotX="50%"
+         android:pivotY="50%"
+         android:interpolator="@interpolator/fast_out_slow_in"
+-        android:duration="283"/>
++        android:duration="250"/>
+ 
+     <!-- This is needed to keep the animation running while task_open_enter completes -->
+     <alpha
+         android:fromAlpha="1.0"
+         android:toAlpha="1.0"
+-        android:duration="600"/>
+-</set>
+\ No newline at end of file
++        android:duration="500"/>
++</set>
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+index 92918c638bb..c0344b4fef7 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+@@ -2435,7 +2435,7 @@ public class NotificationPanelView extends PanelView implements
+ 
+                 // This gets called in the middle of the touch handling, where the state is still
+                 // that we are tracking the panel. Collapse the panel after this is done.
+-                post(mPostCollapseRunnable);
++                post(mEmptySpaceClickedRunnable);
+                 return false;
+             default:
+                 return true;
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
+index e4eeec11fdf..30dec3092e6 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/PanelView.java
+@@ -66,6 +66,8 @@ public abstract class PanelView extends FrameLayout {
+     private int mFixedDuration = NO_FIXED_DURATION;
+     private BiConsumer<Float, Boolean> mExpansionListener;
+ 
++    public static final float SPEED_UP_FACTOR_CLICKED = 1.7f;
++
+     private final void logf(String fmt, Object... args) {
+         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
+     }
+@@ -1213,6 +1215,13 @@ public abstract class PanelView extends FrameLayout {
+         return onMiddleClicked();
+     }
+ 
++    protected final Runnable mEmptySpaceClickedRunnable = new Runnable() {
++        @Override
++        public void run() {
++            collapse(false /* delayed */, SPEED_UP_FACTOR_CLICKED /* speedUpFactor */);
++        }
++    };
++
+     protected final Runnable mPostCollapseRunnable = new Runnable() {
+         @Override
+         public void run() {
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index 27402f90c53..582617050be 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -5610,7 +5610,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+         if (!mNotificationPanel.isFullyCollapsed()) {
+             // close the shade if it was open
+             animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL, true /* force */,
+-                    true /* delayed */);
++                    true /* delayed */, NotificationPanelView.SPEED_UP_FACTOR_CLICKED);
+             visibilityChanged(false);
+ 
+             return true;
+diff --git a/services/core/java/com/android/server/wm/AppTransition.java b/services/core/java/com/android/server/wm/AppTransition.java
+index 4234da2bf7a..28eeedb113e 100644
+--- a/services/core/java/com/android/server/wm/AppTransition.java
++++ b/services/core/java/com/android/server/wm/AppTransition.java
+@@ -152,7 +152,7 @@ public class AppTransition implements Dump {
+     /** Fraction of animation at which the recents thumbnail becomes completely transparent */
+     private static final float RECENTS_THUMBNAIL_FADEOUT_FRACTION = 0.5f;
+ 
+-    static final int DEFAULT_APP_TRANSITION_DURATION = 336;
++    static final int DEFAULT_APP_TRANSITION_DURATION = 270;
+ 
+     /** Interpolator to be used for animations that respond directly to a touch */
+     static final Interpolator TOUCH_RESPONSE_INTERPOLATOR =
+@@ -165,8 +165,8 @@ public class AppTransition implements Dump {
+      * Maximum duration for the clip reveal animation. This is used when there is a lot of movement
+      * involved, to make it more understandable.
+      */
+-    private static final int MAX_CLIP_REVEAL_TRANSITION_DURATION = 420;
+-    private static final int THUMBNAIL_APP_TRANSITION_DURATION = 336;
++    private static final int MAX_CLIP_REVEAL_TRANSITION_DURATION = 270;
++    private static final int THUMBNAIL_APP_TRANSITION_DURATION = 270;
+     private static final long APP_TRANSITION_TIMEOUT_MS = 5000;
+ 
+     private final Context mContext;
+-- 
+2.19.1
+
+
+From 27732960d84c5e36f9a417bb23e7084a0f0b4084 Mon Sep 17 00:00:00 2001
+From: BigBrother1984 <carlosavignano@aospa.co>
+Date: Thu, 13 Nov 2014 22:46:12 +0100
+Subject: [PATCH 15/17] SystemUI: Tiny expanding improvement
+
+Change-Id: I2b650c31d44f9f5762f6510611813b1795cdc740
+Signed-off-by: BigBrother1984 <carlosavignano@aospa.co>
+Signed-off-by: Alex Naidis <alex.naidis@linux.com>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ packages/SystemUI/src/com/android/systemui/ExpandHelper.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/ExpandHelper.java b/packages/SystemUI/src/com/android/systemui/ExpandHelper.java
+index 377fab549a7..a8af0b65dab 100644
+--- a/packages/SystemUI/src/com/android/systemui/ExpandHelper.java
++++ b/packages/SystemUI/src/com/android/systemui/ExpandHelper.java
+@@ -519,7 +519,6 @@ public class ExpandHelper implements Gefingerpoken {
+         mExpanding = true;
+         mCallback.expansionStateChanged(true);
+         if (DEBUG) Log.d(TAG, "scale type " + expandType + " beginning on view: " + v);
+-        mCallback.setUserLockedChild(v, true);
+         mScaler.setView(v);
+         mOldHeight = mScaler.getHeight();
+         mCurrentHeight = mOldHeight;
+@@ -532,6 +531,7 @@ public class ExpandHelper implements Gefingerpoken {
+             if (DEBUG) Log.d(TAG, "working on a non-expandable child");
+             mNaturalHeight = mOldHeight;
+         }
++        mCallback.setUserLockedChild(v, true);
+         if (DEBUG) Log.d(TAG, "got mOldHeight: " + mOldHeight +
+                     " mNaturalHeight: " + mNaturalHeight);
+         return true;
+-- 
+2.19.1
+
+
+From 851a8d5e0521b6b15c5f12a95707e5e67ded6357 Mon Sep 17 00:00:00 2001
+From: Manojkumar Murugeshan <muruge@codeaurora.org>
+Date: Thu, 7 Jun 2018 17:00:47 +0530
+Subject: [PATCH 16/17] SystemUI: Name Cellular Tile based on carrier
+
+CRs-Fixed: 957287
+
+Change-Id: Iac9c3426299db04029b8f9e2ea32a1fdc2faf78e
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../src/com/android/systemui/qs/tiles/CellularTile.java   | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+index 8583e8112f1..010d1059dd4 100644
+--- a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
++++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+@@ -167,17 +167,23 @@ public class CellularTile extends QSTileImpl<SignalState> {
+             cb = mSignalCallback.mInfo;
+         }
+ 
++        DataUsageController.DataUsageInfo carrierLabelInfo = mDataController.getDataUsageInfo();
+         final Resources r = mContext.getResources();
+         state.activityIn = cb.enabled && cb.activityIn;
+         state.activityOut = cb.enabled && cb.activityOut;
+-        state.label = r.getString(R.string.mobile_data);
+         boolean mobileDataEnabled = mDataController.isMobileDataSupported()
+                 && mDataController.isMobileDataEnabled();
+         state.value = mobileDataEnabled;
+         state.expandedAccessibilityClassName = Switch.class.getName();
+         if (cb.noSim) {
++            state.label = r.getString(R.string.mobile_data);
+             state.icon = ResourceIcon.get(R.drawable.ic_qs_no_sim);
+         } else {
++            if (carrierLabelInfo != null) {
++                state.label = carrierLabelInfo.carrier;
++            } else {
++                state.label = r.getString(R.string.mobile_data);
++            }
+             state.icon = ResourceIcon.get(R.drawable.ic_swap_vert);
+         }
+ 
+-- 
+2.19.1
+
+
+From 204f87b0f3f35d6ab72edce647b039e138485761 Mon Sep 17 00:00:00 2001
+From: xyyx <xyyx@mail.ru>
+Date: Wed, 15 Aug 2018 17:29:02 -0700
+Subject: [PATCH 17/17] SystemUI: Remove data tile dialog
+
+Change-Id: Ib5e80e49795ce4413519e854d3f10195eab52e16
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../com/android/systemui/qs/tiles/CellularTile.java    | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+index 010d1059dd4..4e78ddac6cf 100644
+--- a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
++++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+@@ -106,15 +106,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
+         if (getState().state == Tile.STATE_UNAVAILABLE) {
+             return;
+         }
+-        if (mDataController.isMobileDataEnabled()) {
+-            if (mKeyguardMonitor.isSecure() && !mKeyguardMonitor.canSkipBouncer()) {
+-                mActivityStarter.postQSRunnableDismissingKeyguard(this::maybeShowDisableDialog);
+-            } else {
+-                mUiHandler.post(this::maybeShowDisableDialog);
+-            }
+-        } else {
+-            mDataController.setMobileDataEnabled(true);
+-        }
++        mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
+     }
+ 
+     private void maybeShowDisableDialog() {
+-- 
+2.19.1
+

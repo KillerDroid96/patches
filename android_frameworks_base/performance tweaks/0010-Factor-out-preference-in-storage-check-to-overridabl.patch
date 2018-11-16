@@ -1,0 +1,44 @@
+From 687d1a67d81a7b9555fc0711ba4e26b943fcaafb Mon Sep 17 00:00:00 2001
+From: Danny Baumann <dannybaumann@web.de>
+Date: Fri, 14 Nov 2014 09:44:49 -0800
+Subject: [PATCH 10/17] Factor out preference-in-storage check to overridable
+ method.
+
+Change-Id: I2fff3192802f8a180330fda66388eda394334a5a
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ core/java/android/preference/Preference.java | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/core/java/android/preference/Preference.java b/core/java/android/preference/Preference.java
+index 4306bc47f2b..0832163d756 100644
+--- a/core/java/android/preference/Preference.java
++++ b/core/java/android/preference/Preference.java
+@@ -1544,6 +1544,14 @@ public class Preference implements Comparable<Preference> {
+         mDefaultValue = defaultValue;
+     }
+ 
++    /**
++     * Returns whether the preference can be found in persistent storage
++     * @hide
++     */
++    protected boolean isPersisted() {
++        return getSharedPreferences().contains(mKey);
++    }
++
+     private void dispatchSetInitialValue() {
+         if (getPreferenceDataStore() != null) {
+             onSetInitialValue(true, mDefaultValue);
+@@ -1552,7 +1560,7 @@ public class Preference implements Comparable<Preference> {
+ 
+         // By now, we know if we are persistent.
+         final boolean shouldPersist = shouldPersist();
+-        if (!shouldPersist || !getSharedPreferences().contains(mKey)) {
++        if (!shouldPersist || !isPersisted()) {
+             if (mDefaultValue != null) {
+                 onSetInitialValue(false, mDefaultValue);
+             }
+-- 
+2.19.1
+

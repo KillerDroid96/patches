@@ -1,0 +1,45 @@
+From 851a8d5e0521b6b15c5f12a95707e5e67ded6357 Mon Sep 17 00:00:00 2001
+From: Manojkumar Murugeshan <muruge@codeaurora.org>
+Date: Thu, 7 Jun 2018 17:00:47 +0530
+Subject: [PATCH 16/17] SystemUI: Name Cellular Tile based on carrier
+
+CRs-Fixed: 957287
+
+Change-Id: Iac9c3426299db04029b8f9e2ea32a1fdc2faf78e
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../src/com/android/systemui/qs/tiles/CellularTile.java   | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+index 8583e8112f1..010d1059dd4 100644
+--- a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
++++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+@@ -167,17 +167,23 @@ public class CellularTile extends QSTileImpl<SignalState> {
+             cb = mSignalCallback.mInfo;
+         }
+ 
++        DataUsageController.DataUsageInfo carrierLabelInfo = mDataController.getDataUsageInfo();
+         final Resources r = mContext.getResources();
+         state.activityIn = cb.enabled && cb.activityIn;
+         state.activityOut = cb.enabled && cb.activityOut;
+-        state.label = r.getString(R.string.mobile_data);
+         boolean mobileDataEnabled = mDataController.isMobileDataSupported()
+                 && mDataController.isMobileDataEnabled();
+         state.value = mobileDataEnabled;
+         state.expandedAccessibilityClassName = Switch.class.getName();
+         if (cb.noSim) {
++            state.label = r.getString(R.string.mobile_data);
+             state.icon = ResourceIcon.get(R.drawable.ic_qs_no_sim);
+         } else {
++            if (carrierLabelInfo != null) {
++                state.label = carrierLabelInfo.carrier;
++            } else {
++                state.label = r.getString(R.string.mobile_data);
++            }
+             state.icon = ResourceIcon.get(R.drawable.ic_swap_vert);
+         }
+ 
+-- 
+2.19.1
+

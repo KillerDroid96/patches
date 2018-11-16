@@ -1,0 +1,35 @@
+From 204f87b0f3f35d6ab72edce647b039e138485761 Mon Sep 17 00:00:00 2001
+From: xyyx <xyyx@mail.ru>
+Date: Wed, 15 Aug 2018 17:29:02 -0700
+Subject: [PATCH 17/17] SystemUI: Remove data tile dialog
+
+Change-Id: Ib5e80e49795ce4413519e854d3f10195eab52e16
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../com/android/systemui/qs/tiles/CellularTile.java    | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+index 010d1059dd4..4e78ddac6cf 100644
+--- a/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
++++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/CellularTile.java
+@@ -106,15 +106,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
+         if (getState().state == Tile.STATE_UNAVAILABLE) {
+             return;
+         }
+-        if (mDataController.isMobileDataEnabled()) {
+-            if (mKeyguardMonitor.isSecure() && !mKeyguardMonitor.canSkipBouncer()) {
+-                mActivityStarter.postQSRunnableDismissingKeyguard(this::maybeShowDisableDialog);
+-            } else {
+-                mUiHandler.post(this::maybeShowDisableDialog);
+-            }
+-        } else {
+-            mDataController.setMobileDataEnabled(true);
+-        }
++        mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
+     }
+ 
+     private void maybeShowDisableDialog() {
+-- 
+2.19.1
+

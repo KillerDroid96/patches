@@ -1,0 +1,318 @@
+From d36a19c2d20afb602b27fa67fef1138216ab9c45 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:28:05 -0600
+Subject: [PATCH 01/11] Enable VoLTE icon by default
+
+Change-Id: I6b4f7130f36b9cf22fe2e14e3e26a637f57d5f14
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index d4b47dc1a..422dee396 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -115,7 +115,7 @@
+             android:icon="@drawable/ic_volte"
+             android:title="@string/volte_icon_title"
+             android:summary="@string/volte_icon_summary"
+-            android:defaultValue="false"/>
++            android:defaultValue="true"/>
+ 
+         <!--<cyanogenmod.preference.CMSystemSettingSwitchPreference
+             android:key="status_bar_notif_count"
+-- 
+2.19.1
+
+
+From f2c593bf88fccaf3f97bcc8a89f100cd7f24ce9d Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:35:05 -0600
+Subject: [PATCH 02/11] Enable Center clock by default
+
+Change-Id: I3a3686a7e78e4c545207d15c407ed6c7575f08a0
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index 422dee396..c45813764 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -39,7 +39,7 @@
+             android:dialogTitle="@string/status_bar_clock_position_title"
+             android:entries="@array/status_bar_clock_position_entries"
+             android:entryValues="@array/status_bar_clock_position_values"
+-            android:defaultValue="2" />
++            android:defaultValue="1" />
+ 
+         <PreferenceScreen
+             android:key="clock"
+-- 
+2.19.1
+
+
+From 2a5b42c24394e2d9c6cf91e23fcb14b4a4849d60 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:41:43 -0600
+Subject: [PATCH 03/11] Enable QS pulldown from right by default
+
+Change-Id: Ide3a1574e9068f28a86b6c1d192d5d9f502cedce
+---
+ res/xml/crdroid_settings_statusbar.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_statusbar.xml b/res/xml/crdroid_settings_statusbar.xml
+index c45813764..e07daaca1 100644
+--- a/res/xml/crdroid_settings_statusbar.xml
++++ b/res/xml/crdroid_settings_statusbar.xml
+@@ -248,7 +248,7 @@
+             android:title="@string/status_bar_quick_qs_pulldown_title"
+             android:entries="@array/status_bar_quick_qs_pulldown_entries"
+             android:entryValues="@array/status_bar_quick_qs_pulldown_values"
+-            android:defaultValue="0" />
++            android:defaultValue="2" />
+ 
+         <com.crdroid.settings.preferences.SystemSettingListPreference
+             android:key="qs_smart_pulldown"
+-- 
+2.19.1
+
+
+From 4d224aadd422e0e4d8795521cf932644568c43b9 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:44:38 -0600
+Subject: [PATCH 04/11] Enable Clock seconds by default
+
+Change-Id: I49c7f93c5021d45148e11cfd47afae77378e51f7
+---
+ res/xml/status_bar_clock.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/status_bar_clock.xml b/res/xml/status_bar_clock.xml
+index b85ff9338..e17700cca 100644
+--- a/res/xml/status_bar_clock.xml
++++ b/res/xml/status_bar_clock.xml
+@@ -23,7 +23,7 @@
+         android:key="status_bar_clock_seconds"
+         android:title="@string/status_bar_clock_seconds_title"
+         android:summary="@string/status_bar_clock_seconds_summary"
+-        android:defaultValue="false" />
++        android:defaultValue="true" />
+ 
+     <lineageos.preference.LineageSystemSettingListPreference
+         android:key="status_bar_am_pm"
+-- 
+2.19.1
+
+
+From 26979cb170305f2ae3e080d32aee54950c72a069 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:50:02 -0600
+Subject: [PATCH 05/11] Enable battery bar by default
+
+Change-Id: Ib5a6ac80aaba37aab9aad023310cfb0399416c5f
+---
+ res/xml/battery_bar.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/res/xml/battery_bar.xml b/res/xml/battery_bar.xml
+index 2b0f345c2..959ac2033 100644
+--- a/res/xml/battery_bar.xml
++++ b/res/xml/battery_bar.xml
+@@ -28,7 +28,7 @@
+     <SwitchPreference
+         android:key="statusbar_battery_bar"
+         android:title="@string/battery_bar_title"
+-        android:defaultValue="false" />
++        android:defaultValue="true" />
+ 
+     <com.crdroid.settings.preferences.CustomSeekBarPreference
+         android:key="statusbar_battery_bar_thickness"
+@@ -82,7 +82,7 @@
+     <com.crdroid.settings.preferences.SystemSettingSwitchPreference
+         android:key="statusbar_battery_bar_enable_charging_color"
+         android:title="@string/battery_bar_use_charging_color"
+-        android:defaultValue="true"
++        android:defaultValue="false"
+         android:dependency="statusbar_battery_bar" />
+ 
+     <com.crdroid.settings.preferences.colorpicker.ColorPickerPreference
+-- 
+2.19.1
+
+
+From 7d81c5fd9c0732f018868a6b86d7204d3b513315 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:52:31 -0600
+Subject: [PATCH 06/11] Enable OTG in power menu by default
+
+Change-Id: Ie4721e03f1e2ed27bc87b4382d05f06db880c18d
+---
+ res/xml/power_menu_settings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/power_menu_settings.xml b/res/xml/power_menu_settings.xml
+index 081483514..3adfb244d 100644
+--- a/res/xml/power_menu_settings.xml
++++ b/res/xml/power_menu_settings.xml
+@@ -37,7 +37,7 @@
+         android:key="onthego"
+         android:icon="@drawable/ic_onthego"
+         android:title="@string/power_menu_onthego_title"
+-        android:defaultValue="false" />
++        android:defaultValue="true" />
+ 
+     <SwitchPreference
+         android:key="airplane"
+-- 
+2.19.1
+
+
+From d0860e5f5c5a4e7ce644512ca1bda21b13ba3dac Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:00:05 -0600
+Subject: [PATCH 07/11] Enable face auto unlock by default
+
+Change-Id: Iba3d599a9d2c7b8048e47d1ed18d5ba96bf23cd8
+---
+ res/xml/crdroid_settings_lockscreen.xml | 2 +-
+ res/xml/crdroid_settings_sound.xml      | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/res/xml/crdroid_settings_lockscreen.xml b/res/xml/crdroid_settings_lockscreen.xml
+index dc4510d06..a202ecc0f 100644
+--- a/res/xml/crdroid_settings_lockscreen.xml
++++ b/res/xml/crdroid_settings_lockscreen.xml
+@@ -140,7 +140,7 @@
+             android:icon="@drawable/ic_face"
+             android:title="@string/face_auto_unlock_title"
+             android:summary="@string/face_auto_unlock_summary"
+-            android:defaultValue="false"/>
++            android:defaultValue="true"/>
+ 
+         <com.crdroid.settings.preferences.SystemSettingSwitchPreference
+             android:key="double_tap_sleep_lockscreen"
+diff --git a/res/xml/crdroid_settings_sound.xml b/res/xml/crdroid_settings_sound.xml
+index 04f2ba147..31e38f092 100644
+--- a/res/xml/crdroid_settings_sound.xml
++++ b/res/xml/crdroid_settings_sound.xml
+@@ -39,7 +39,7 @@
+         android:icon="@drawable/ic_screenshot_type"
+         android:title="@string/screenshot_sound_title"
+         android:summary="@string/screenshot_sound_summary"
+-        android:defaultValue="true" />
++        android:defaultValue="false" />
+ 
+     <!-- Volume Steps -->
+     <PreferenceScreen
+-- 
+2.19.1
+
+
+From 0db9e6aa55f94a1e2192d60279dcd6595183cd3a Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:01:55 -0600
+Subject: [PATCH 08/11] Enable long press power for torch by default
+
+Change-Id: I828425228e29a172f37892bcbe491ff59843aeea
+---
+ res/xml/crdroid_settings_button.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_button.xml b/res/xml/crdroid_settings_button.xml
+index d757543fb..b32675711 100644
+--- a/res/xml/crdroid_settings_button.xml
++++ b/res/xml/crdroid_settings_button.xml
+@@ -71,7 +71,7 @@
+             android:icon="@drawable/ic_flashlight"
+             android:title="@string/torch_long_press_power_gesture_title"
+             android:summary="@string/torch_long_press_power_gesture_desc"
+-            android:defaultValue="false"
++            android:defaultValue="true"
+             lineage:requiresConfig="@*android:bool/config_supportLongPressPowerWhenNonInteractive" />
+ 
+         <ListPreference
+-- 
+2.19.1
+
+
+From e97f0ce489e9642d927d47747bea38ddc2c62bf0 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:05:10 -0600
+Subject: [PATCH 09/11] Enable CRT screen off animation by default
+
+Change-Id: I048a26a11db57739a0fce20049f0c918b3042a69
+---
+ res/xml/animations.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/animations.xml b/res/xml/animations.xml
+index a37aa929c..74390d097 100644
+--- a/res/xml/animations.xml
++++ b/res/xml/animations.xml
+@@ -24,7 +24,7 @@
+         android:title="@string/screen_off_animation_title"
+         android:entries="@array/screen_off_animation_entries"
+         android:entryValues="@array/screen_off_animation_values"
+-        android:defaultValue="0" />
++        android:defaultValue="2" />
+ 
+     <PreferenceScreen
+         android:key="system_animation"
+-- 
+2.19.1
+
+
+From 29def9524df1c9651b47ed47863676cbcec5593e Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:08:25 -0600
+Subject: [PATCH 10/11] Enable AOSP recents by default
+
+Change-Id: I777199d251e3c1462f5c0a3abedda5c5e5ad4e36
+---
+ res/xml/crdroid_settings_recents.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/crdroid_settings_recents.xml b/res/xml/crdroid_settings_recents.xml
+index c262a97d8..67e0da441 100644
+--- a/res/xml/crdroid_settings_recents.xml
++++ b/res/xml/crdroid_settings_recents.xml
+@@ -25,7 +25,7 @@
+         android:dialogTitle="@string/recents_style_title"
+         android:entries="@array/recents_style_entries"
+         android:entryValues="@array/recents_style_values"
+-        android:defaultValue="0" />
++        android:defaultValue="1" />
+ 
+     <Preference
+         android:key="recents_icon_pack"
+-- 
+2.19.1
+
+
+From 58231c269e76f57ad243d3887205e7fc01ada598 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:11:20 -0600
+Subject: [PATCH 11/11] ENable charging sounds by default
+
+Change-Id: I387b43b2bdca187962a3d6c1534463225ca6830f
+---
+ res/xml/charging_sounds_settings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/charging_sounds_settings.xml b/res/xml/charging_sounds_settings.xml
+index adca73477..68d522f95 100644
+--- a/res/xml/charging_sounds_settings.xml
++++ b/res/xml/charging_sounds_settings.xml
+@@ -33,6 +33,6 @@
+         android:key="charging_sounds_ringtone"
+         android:title="@string/charging_sounds_ringtone_title"
+         android:dependency="charging_sounds_enabled"
+-        android:persistent="false" />
++        android:persistent="true" />
+ 
+ </PreferenceScreen>
+-- 
+2.19.1
+

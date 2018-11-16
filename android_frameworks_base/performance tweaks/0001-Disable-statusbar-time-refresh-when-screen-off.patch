@@ -1,0 +1,104 @@
+From 5edb4174d468b8cb343c8adafddb90a87db50810 Mon Sep 17 00:00:00 2001
+From: Jun Su <juns@nvidia.com>
+Date: Sun, 19 Jan 2014 12:43:58 +0800
+Subject: [PATCH 01/17] Disable statusbar time refresh when screen off
+
+When screen is off, don't refresh the status bar to save power.
+When screen is on, refresh immediately for user experience.
+
+PS: (updateClock(); => getHandler().post(() -> updateClock());)
+updated for android 8.0
+
+Change-Id: Ie250e20bab57c096a16886680a53263c635bf6f4
+Signed-off-by: Joe Maples <joe@frap129.org>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../android/systemui/statusbar/policy/Clock.java   | 14 +++++++++++++-
+ .../systemui/statusbar/policy/DateView.java        | 13 ++++++++++++-
+ 2 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
+index 872b8865a4e..d53029160a3 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/Clock.java
+@@ -79,6 +79,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+     private SimpleDateFormat mClockFormat;
+     private SimpleDateFormat mContentDescriptionFormat;
+     private Locale mLocale;
++    private boolean mScreenOn = true;
+ 
+     private static final int AM_PM_STYLE_NORMAL  = 0;
+     private static final int AM_PM_STYLE_SMALL   = 1;
+@@ -170,6 +171,8 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+             filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+             filter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
+             filter.addAction(Intent.ACTION_USER_SWITCHED);
++            filter.addAction(Intent.ACTION_SCREEN_ON);
++            filter.addAction(Intent.ACTION_SCREEN_OFF);
+ 
+             getContext().registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter,
+                     null, Dependency.get(Dependency.TIME_TICK_HANDLER));
+@@ -242,7 +245,16 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
+                     return;
+                 });
+             }
+-            getHandler().post(() -> updateClock());
++
++            if (action.equals(Intent.ACTION_SCREEN_ON)) {
++                mScreenOn = true;
++            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
++                mScreenOn = false;
++            }
++
++            if (mScreenOn) {
++                getHandler().post(() -> updateClock());
++            }
+         }
+     };
+ 
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
+index dcce77c7c35..e1f523fcf2c 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/DateView.java
+@@ -42,11 +42,18 @@ public class DateView extends TextView {
+     private DateFormat mDateFormat;
+     private String mLastText;
+     private String mDatePattern;
++    private boolean mScreenOn = true;
+ 
+     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
+         @Override
+         public void onReceive(Context context, Intent intent) {
+             final String action = intent.getAction();
++            if (action.equals(Intent.ACTION_SCREEN_ON)) {
++                mScreenOn = true;
++            } else if (action.equals(Intent.ACTION_SCREEN_OFF)) {
++                mScreenOn = false;
++            }
++
+             if (Intent.ACTION_TIME_TICK.equals(action)
+                     || Intent.ACTION_TIME_CHANGED.equals(action)
+                     || Intent.ACTION_TIMEZONE_CHANGED.equals(action)
+@@ -56,7 +63,9 @@ public class DateView extends TextView {
+                     // need to get a fresh date format
+                     getHandler().post(() -> mDateFormat = null);
+                 }
+-                getHandler().post(() -> updateClock());
++                if (mScreenOn) {
++                    getHandler().post(() -> updateClock());
++                }
+             }
+         }
+     };
+@@ -83,6 +92,8 @@ public class DateView extends TextView {
+         super.onAttachedToWindow();
+ 
+         IntentFilter filter = new IntentFilter();
++        filter.addAction(Intent.ACTION_SCREEN_ON);
++        filter.addAction(Intent.ACTION_SCREEN_OFF);
+         filter.addAction(Intent.ACTION_TIME_TICK);
+         filter.addAction(Intent.ACTION_TIME_CHANGED);
+         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+-- 
+2.19.1
+

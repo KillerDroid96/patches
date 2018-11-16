@@ -1,0 +1,40 @@
+From d0860e5f5c5a4e7ce644512ca1bda21b13ba3dac Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:00:05 -0600
+Subject: [PATCH 07/11] Enable face auto unlock by default
+
+Change-Id: Iba3d599a9d2c7b8048e47d1ed18d5ba96bf23cd8
+---
+ res/xml/crdroid_settings_lockscreen.xml | 2 +-
+ res/xml/crdroid_settings_sound.xml      | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/res/xml/crdroid_settings_lockscreen.xml b/res/xml/crdroid_settings_lockscreen.xml
+index dc4510d06..a202ecc0f 100644
+--- a/res/xml/crdroid_settings_lockscreen.xml
++++ b/res/xml/crdroid_settings_lockscreen.xml
+@@ -140,7 +140,7 @@
+             android:icon="@drawable/ic_face"
+             android:title="@string/face_auto_unlock_title"
+             android:summary="@string/face_auto_unlock_summary"
+-            android:defaultValue="false"/>
++            android:defaultValue="true"/>
+ 
+         <com.crdroid.settings.preferences.SystemSettingSwitchPreference
+             android:key="double_tap_sleep_lockscreen"
+diff --git a/res/xml/crdroid_settings_sound.xml b/res/xml/crdroid_settings_sound.xml
+index 04f2ba147..31e38f092 100644
+--- a/res/xml/crdroid_settings_sound.xml
++++ b/res/xml/crdroid_settings_sound.xml
+@@ -39,7 +39,7 @@
+         android:icon="@drawable/ic_screenshot_type"
+         android:title="@string/screenshot_sound_title"
+         android:summary="@string/screenshot_sound_summary"
+-        android:defaultValue="true" />
++        android:defaultValue="false" />
+ 
+     <!-- Volume Steps -->
+     <PreferenceScreen
+-- 
+2.19.1
+

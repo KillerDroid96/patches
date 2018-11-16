@@ -1,0 +1,26 @@
+From 7d81c5fd9c0732f018868a6b86d7204d3b513315 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 09:52:31 -0600
+Subject: [PATCH 06/11] Enable OTG in power menu by default
+
+Change-Id: Ie4721e03f1e2ed27bc87b4382d05f06db880c18d
+---
+ res/xml/power_menu_settings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/power_menu_settings.xml b/res/xml/power_menu_settings.xml
+index 081483514..3adfb244d 100644
+--- a/res/xml/power_menu_settings.xml
++++ b/res/xml/power_menu_settings.xml
+@@ -37,7 +37,7 @@
+         android:key="onthego"
+         android:icon="@drawable/ic_onthego"
+         android:title="@string/power_menu_onthego_title"
+-        android:defaultValue="false" />
++        android:defaultValue="true" />
+ 
+     <SwitchPreference
+         android:key="airplane"
+-- 
+2.19.1
+

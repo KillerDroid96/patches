@@ -1,0 +1,41 @@
+From 2dfcca9d231724bcb47b57b76dd96dad31d0baa2 Mon Sep 17 00:00:00 2001
+From: Chet Kener <Cl3Kener@gmail.com>
+Date: Tue, 6 Oct 2015 10:23:07 -0400
+Subject: [PATCH 13/17] Speed up StatusBar
+
+Change-Id: I514f093050a94923da02f4a1073b1772bd575671
+Signed-off-by: Chet Kener <Cl3Kener@gmail.com>
+Signed-off-by: spezi77 <spezi77@gmx.com>
+Signed-off-by: KillerDroid96 <mkeller96@gmail.com>
+---
+ .../com/android/systemui/statusbar/phone/StatusBar.java    | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index 81c6a33f8ab..27402f90c53 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -356,9 +356,8 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+     private static final float BRIGHTNESS_CONTROL_PADDING = 0.15f;
+     private static final int BRIGHTNESS_CONTROL_LONG_PRESS_TIMEOUT = 750; // ms
+     private static final int BRIGHTNESS_CONTROL_LINGER_THRESHOLD = 20;
+-
+-    public static final int FADE_KEYGUARD_START_DELAY = 100;
+-    public static final int FADE_KEYGUARD_DURATION = 300;
++    public static final int FADE_KEYGUARD_START_DELAY = 50;
++    public static final int FADE_KEYGUARD_DURATION = 150;
+     public static final int FADE_KEYGUARD_DURATION_PULSING = 96;
+ 
+     /** If true, the system is in the half-boot-to-decryption-screen state.
+@@ -1881,7 +1880,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+                                 + mBackdropBack.getDrawable());
+                     }
+                     mBackdropFront.animate()
+-                            .setDuration(250)
++                            .setDuration(150)
+                             .alpha(0f).withEndAction(mHideBackdropFront);
+                 }
+             }
+-- 
+2.19.1
+

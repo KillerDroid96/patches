@@ -1,0 +1,25 @@
+From 58231c269e76f57ad243d3887205e7fc01ada598 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:11:20 -0600
+Subject: [PATCH 11/11] ENable charging sounds by default
+
+Change-Id: I387b43b2bdca187962a3d6c1534463225ca6830f
+---
+ res/xml/charging_sounds_settings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/charging_sounds_settings.xml b/res/xml/charging_sounds_settings.xml
+index adca73477..68d522f95 100644
+--- a/res/xml/charging_sounds_settings.xml
++++ b/res/xml/charging_sounds_settings.xml
+@@ -33,6 +33,6 @@
+         android:key="charging_sounds_ringtone"
+         android:title="@string/charging_sounds_ringtone_title"
+         android:dependency="charging_sounds_enabled"
+-        android:persistent="false" />
++        android:persistent="true" />
+ 
+ </PreferenceScreen>
+-- 
+2.19.1
+

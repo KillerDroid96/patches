@@ -1,0 +1,26 @@
+From e97f0ce489e9642d927d47747bea38ddc2c62bf0 Mon Sep 17 00:00:00 2001
+From: KillerDroid96 <mkeller96@gmail.com>
+Date: Fri, 16 Nov 2018 10:05:10 -0600
+Subject: [PATCH 09/11] Enable CRT screen off animation by default
+
+Change-Id: I048a26a11db57739a0fce20049f0c918b3042a69
+---
+ res/xml/animations.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/xml/animations.xml b/res/xml/animations.xml
+index a37aa929c..74390d097 100644
+--- a/res/xml/animations.xml
++++ b/res/xml/animations.xml
+@@ -24,7 +24,7 @@
+         android:title="@string/screen_off_animation_title"
+         android:entries="@array/screen_off_animation_entries"
+         android:entryValues="@array/screen_off_animation_values"
+-        android:defaultValue="0" />
++        android:defaultValue="2" />
+ 
+     <PreferenceScreen
+         android:key="system_animation"
+-- 
+2.19.1
+
