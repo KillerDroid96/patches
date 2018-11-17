@@ -6,3 +6,8 @@
 | git apply --stat blah.patch | Status of .patch |
 | git apply --check blah.patch | Checks .patch for errors |
 | git am --signoff < blah.patch | Applies the .patch | 
+
+#### Example Usage:
+    cd /home/killerdroid96/Github/CRD/frameworks/base/
+    git format-patch -15 HEAD --stdout > performance-tweaks.patch
+    git am < '/home/killerdroid96/Github/CRD_Patches/android_frameworks_base/performance-tweaks.patch' 
