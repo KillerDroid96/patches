@@ -1,0 +1,298 @@
+From 70de9bbb7c6584a359181f38e8a11a1659854834 Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mkbestas@lineageos.org>
+Date: Wed, 20 Dec 2017 19:12:59 +0200
+Subject: [PATCH 1/3] cryptfs_hw: Add compatibility for pre-O hw crypto
+
+* Restore compatibility for pre-O way of hw crypto
+  interaction with qsee as the new way is not
+  compatible with old blobs.
+* Old blobs and current OSS keymaster still use the
+  old property to check if qseecomd is loaded.
+* This conditionally reverts:
+  cryptfs_hw: Add new APIs for key management
+  84ac4882d6feeceb24e983a4eaba1d148c2ba3e6
+  cryptfs_hw: Use HW keymaster for FDE keys
+  a5d3a02eb13362490222ac2a7eefde6543546e31
+  cryptfs_hw: Wait for qseecom daemon to start FDE operation
+  b01c6ec9373bee3e9d71d2300ebce7c287c3d687
+
+Change-Id: I9a5db406c16c3610237a1b85fbfab5c0d63e4960
+---
+ Android.bp   |   8 ++++
+ cryptfs_hw.c | 102 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 109 insertions(+), 1 deletion(-)
+
+diff --git a/Android.bp b/Android.bp
+index 8aea8b6..4fc473b 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -16,6 +16,14 @@ cc_library_shared {
+     srcs: sourceFiles,
+     shared_libs: commonSharedLibraries,
+ 
++    product_variables: {
++        lineage: {
++            device_support_legacy_hwfde: {
++                cflags: ["-DLEGACY_HW_DISK_ENCRYPTION"],
++            },
++        },
++    },
++
+     owner: "qti",
+ }
+ 
+diff --git a/cryptfs_hw.c b/cryptfs_hw.c
+index 65618df..e231759 100644
+--- a/cryptfs_hw.c
++++ b/cryptfs_hw.c
+@@ -43,6 +43,10 @@
+ #include "cutils/android_reboot.h"
+ #include "cryptfs_hw.h"
+ 
++#ifdef LEGACY_HW_DISK_ENCRYPTION
++#define QSEECOM_LIBRARY_NAME "libQSEEComAPI.so"
++#endif
++
+ /*
+  * When device comes up or when user tries to change the password, user can
+  * try wrong password upto a certain number of times. If user enters wrong
+@@ -57,6 +61,13 @@
+ #define SET_HW_DISK_ENC_KEY				1
+ #define UPDATE_HW_DISK_ENC_KEY				2
+ 
++#ifdef LEGACY_HW_DISK_ENCRYPTION
++static int loaded_library = 0;
++static int (*qseecom_create_key)(int, void*);
++static int (*qseecom_update_key)(int, void*, void*);
++static int (*qseecom_wipe_key)(int);
++#endif
++
+ #define CRYPTFS_HW_KMS_CLEAR_KEY			0
+ #define CRYPTFS_HW_KMS_WIPE_KEY				1
+ #define CRYPTFS_HW_UP_CHECK_COUNT			10
+@@ -83,6 +94,77 @@ static inline void* secure_memset(void* v, int c , size_t n)
+ 	return v;
+ }
+ 
++static int is_qseecom_up();
++
++#ifdef LEGACY_HW_DISK_ENCRYPTION
++static int load_qseecom_library()
++{
++    const char *error = NULL;
++    if (loaded_library)
++        return loaded_library;
++
++    if (!is_qseecom_up()) {
++        SLOGE("Timed out waiting for QSEECom listeners. Aborting FDE key operation");
++        return 0;
++    }
++
++    void * handle = dlopen(QSEECOM_LIBRARY_NAME, RTLD_NOW);
++    if (handle) {
++        dlerror(); /* Clear any existing error */
++        *(void **) (&qseecom_create_key) = dlsym(handle, "QSEECom_create_key");
++
++        if ((error = dlerror()) == NULL) {
++            SLOGD("Success loading QSEECom_create_key \n");
++            *(void **) (&qseecom_update_key) = dlsym(handle, "QSEECom_update_key_user_info");
++            if ((error = dlerror()) == NULL) {
++                SLOGD("Success loading QSEECom_update_key_user_info\n");
++                *(void **) (&qseecom_wipe_key) = dlsym(handle, "QSEECom_wipe_key");
++                if ((error = dlerror()) == NULL) {
++                    loaded_library = 1;
++                    SLOGD("Success loading QSEECom_wipe_key \n");
++                }
++                else
++                    SLOGE("Error %s loading symbols for QSEECom APIs \n", error);
++            }
++            else
++                SLOGE("Error %s loading symbols for QSEECom APIs \n", error);
++        }
++    } else {
++        SLOGE("Could not load libQSEEComAPI.so \n");
++    }
++
++    if (error)
++        dlclose(handle);
++
++    return loaded_library;
++}
++
++static int cryptfs_hw_create_key(enum cryptfs_hw_key_management_usage_type usage,
++					unsigned char *hash32)
++{
++	if (load_qseecom_library())
++		return qseecom_create_key(usage, hash32);
++
++	return CRYPTFS_HW_CREATE_KEY_FAILED;
++}
++
++static int cryptfs_hw_wipe_key(enum cryptfs_hw_key_management_usage_type usage)
++{
++	if (load_qseecom_library())
++		return qseecom_wipe_key(usage);
++
++	return CRYPTFS_HW_WIPE_KEY_FAILED;
++}
++
++static int cryptfs_hw_update_key(enum cryptfs_hw_key_management_usage_type usage,
++			unsigned char *current_hash32, unsigned char *new_hash32)
++{
++	if (load_qseecom_library())
++		return qseecom_update_key(usage, current_hash32, new_hash32);
++
++	return CRYPTFS_HW_UPDATE_KEY_FAILED;
++}
++#else
+ static size_t memscpy(void *dst, size_t dst_size, const void *src, size_t src_size)
+ {
+ 	size_t min_size = (dst_size < src_size) ? dst_size : src_size;
+@@ -256,6 +338,7 @@ static int cryptfs_hw_update_key(enum cryptfs_hw_key_management_usage_type usage
+ 	close(qseecom_fd);
+ 	return ret;
+ }
++#endif
+ 
+ static int map_usage(int usage)
+ {
+@@ -290,13 +373,17 @@ static unsigned char* get_tmp_passwd(const char* passwd)
+     return tmp_passwd;
+ }
+ 
+-static int is_qseecom_up()
++int is_qseecom_up()
+ {
+     int i = 0;
+     char value[PROPERTY_VALUE_MAX] = {0};
+ 
+     for (; i<CRYPTFS_HW_UP_CHECK_COUNT; i++) {
++#ifdef LEGACY_HW_DISK_ENCRYPTION
++        property_get("sys.keymaster.loaded", value, "");
++#else
+         property_get("vendor.sys.keymaster.loaded", value, "");
++#endif
+         if (!strncmp(value, "true", PROPERTY_VALUE_MAX))
+             return 1;
+         usleep(100000);
+@@ -397,8 +484,21 @@ static int get_keymaster_version()
+ 
+ int should_use_keymaster()
+ {
++#ifdef LEGACY_HW_DISK_ENCRYPTION
++    /*
++     * HW FDE key should be tied to keymaster only if
++     * new Keymaster is available
++     */
++    int rc = 0;
++    if (get_keymaster_version() != KEYMASTER_MODULE_API_VERSION_1_0) {
++        SLOGI("Keymaster version is not 1.0");
++        return rc;
++    }
++#else
+     /*
+      * HW FDE key should be tied to keymaster
+      */
++#endif
++
+     return 1;
+ }
+-- 
+2.19.1
+
+
+From b4b867e36649ef32fe8ea8f2291f5475dce69892 Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mkbestas@lineageos.org>
+Date: Wed, 20 Dec 2017 22:07:16 +0200
+Subject: [PATCH 2/3] cryptfs_hw: Featureize support for waiting on QSEE to
+ start
+
+* Match keymaster change to support older blobs
+
+Change-Id: I2d45fe60e0f4bf076d064d6c432740af0b3c840c
+---
+ Android.bp   | 3 +++
+ cryptfs_hw.c | 7 +++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/Android.bp b/Android.bp
+index 4fc473b..89ac70a 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -21,6 +21,9 @@ cc_library_shared {
+             device_support_legacy_hwfde: {
+                 cflags: ["-DLEGACY_HW_DISK_ENCRYPTION"],
+             },
++            device_support_wait_for_qsee: {
++                cflags: ["-DWAIT_FOR_QSEE"],
++            },
+         },
+     },
+ 
+diff --git a/cryptfs_hw.c b/cryptfs_hw.c
+index e231759..6a3a5b1 100644
+--- a/cryptfs_hw.c
++++ b/cryptfs_hw.c
+@@ -373,6 +373,7 @@ static unsigned char* get_tmp_passwd(const char* passwd)
+     return tmp_passwd;
+ }
+ 
++#ifdef WAIT_FOR_QSEE
+ int is_qseecom_up()
+ {
+     int i = 0;
+@@ -390,6 +391,12 @@ int is_qseecom_up()
+     }
+     return 0;
+ }
++#else
++int is_qseecom_up()
++{
++    return 1;
++}
++#endif
+ 
+ /*
+  * For NON-ICE targets, it would return 0 on success. On ICE based targets,
+-- 
+2.19.1
+
+
+From 726c7d273770def12d3b952657e0d44a0e67d6f2 Mon Sep 17 00:00:00 2001
+From: steadfasterX <steadfasterX@gmail.com>
+Date: Wed, 25 Apr 2018 15:56:18 +0200
+Subject: [PATCH 3/3] cryptfs_hw: add missing logging tag
+
+Change-Id: Iba69c6feb976cab2e466d30241f899540eff4b51
+
+cryptfs_hw: Properly define log tag
+
+ * LOG_TAG should be defined before including log.h
+
+vendor/qcom/opensource/cryptfs_hw/cryptfs_hw.c:45:9: warning: 'LOG_TAG'
+macro redefined [-Wmacro-redefined]
+        ^
+system/core/liblog/include/log/log.h:51:9: note: previous definition is
+here
+
+Change-Id: Id6fdf6f1582360514de9140bd42feaa698527557
+---
+ cryptfs_hw.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/cryptfs_hw.c b/cryptfs_hw.c
+index 6a3a5b1..2545d67 100644
+--- a/cryptfs_hw.c
++++ b/cryptfs_hw.c
+@@ -26,6 +26,8 @@
+  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#define LOG_TAG "Cryptfs_hw"
++
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/limits.h>
+-- 
+2.19.1
+

@@ -1,0 +1,1235 @@
+From d9de28a7ca2233bef487a9d84ac04b476ef6cf95 Mon Sep 17 00:00:00 2001
+From: Rashed Abdel-Tawab <rashed@linux.com>
+Date: Sun, 5 Nov 2017 16:15:42 -0500
+Subject: [PATCH 01/12] qcom: Label vendor files with (vendor|system/vendor)
+ instead of vendor
+
+Not all devices have a vendor partition so these labels blatantly get
+ignored without labelling system/vendor on those devices.
+
+Also move msm8998 gralloc and vulkan labels to msm8998/file_contexts
+
+Change-Id: I244d667f6b3ddcf7eac71719a981dc25dc401873
+---
+ vendor/apq8098_latv/file_contexts |   4 +-
+ vendor/common/file_contexts       | 102 +++++++++++++++---------------
+ vendor/msm8937/file_contexts      |   6 +-
+ vendor/msm8953/file_contexts      |   4 +-
+ vendor/msm8996/file_contexts      |   4 +-
+ vendor/msm8998/file_contexts      |   4 ++
+ vendor/sdm660/file_contexts       |   4 +-
+ 7 files changed, 65 insertions(+), 63 deletions(-)
+
+diff --git a/vendor/apq8098_latv/file_contexts b/vendor/apq8098_latv/file_contexts
+index a0a703db..ee995865 100644
+--- a/vendor/apq8098_latv/file_contexts
++++ b/vendor/apq8098_latv/file_contexts
+@@ -114,8 +114,8 @@
+ /sys/devices/virtual/graphics/fb([0-3])+/pa                                      u:object_r:sysfs_graphics:s0
+ ###################################
+ # adding same_process_hal_file
+-/vendor/lib(64)?/hw/gralloc\.apq8098_latv\.so                                    u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/hdmi_cec\.apq8098_latv\.so                                   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.apq8098_latv\.so                                    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/hdmi_cec\.apq8098_latv\.so                                   u:object_r:same_process_hal_file:s0
+ 
+ #TODO: Need to remove the regexp
+ /sys/devices(/platform)?/soc/[a-z0-9\.:]+,[a-z0-9\-\_]+/subsys[0-9]+/name         u:object_r:sysfs_ssr:s0
+diff --git a/vendor/common/file_contexts b/vendor/common/file_contexts
+index 6f49b77a..e60d6afe 100644
+--- a/vendor/common/file_contexts
++++ b/vendor/common/file_contexts
+@@ -327,7 +327,7 @@
+ /(vendor|system/vendor)/bin/hw/vendor\.qti\.hardware\.qdutils_disp@1\.0-service-qti u:object_r:hal_qdutils_disp_qti_exec:s0
+ /(vendor|system/vendor)/bin/hw/vendor\.qti\.hardware\.sensorscalibrate@1\.0-service u:object_r:hal_sensorscalibrate_qti_default_exec:s0
+ /(vendor|system/vendor)/bin/power_off_alarm        u:object_r:power_off_alarm_exec:s0
+-/vendor/bin/hw/vendor\.qti\.hardware\.vibrator@1\.[0-2]-service    u:object_r:hal_vibrator_default_exec:s0
++/(vendor|system/vendor)/bin/hw/vendor\.qti\.hardware\.vibrator@1\.[0-2]-service    u:object_r:hal_vibrator_default_exec:s0
+ /(vendor|system/vendor)/bin/hw/android\.hardware\.usb\.gadget@1\.0-service-qti u:object_r:hal_usb_gadget_qti_exec:s0
+ /(vendor|system/vendor)/bin/hw/vendor\.qti\.hardware\.scve\.panorama@1\.0-service    u:object_r:vendor_scve_exec:s0
+ /(vendor|system/vendor)/bin/hw/vendor\.qti\.hardware\.scve\.objecttracker@1\.0-service    u:object_r:vendor_scve_exec:s0
+@@ -631,7 +631,7 @@
+ ###################################
+ # etc files
+ #
+-/vendor/etc/hbtp/*                                                  u:object_r:hbtp_cfg_file:s0
++/(vendor|system/vendor)/etc/hbtp/*                                  u:object_r:hbtp_cfg_file:s0
+ 
+ ###################################
+ # adsp files
+@@ -646,81 +646,79 @@
+ ###################################
+ # vendor files
+ #
+-/vendor/package(/.*)?                      u:object_r:vendor_carrier_file:s0
+-/vendor/package(/.*)?/overlay(/.*)?        u:object_r:vendor_overlay_file:s0
+-/vendor/package(/.*)?/app(/.*)?            u:object_r:vendor_app_file:s0
++/(vendor|system/vendor)/package(/.*)?                               u:object_r:vendor_carrier_file:s0
++/(vendor|system/vendor)/package(/.*)?/overlay(/.*)?                 u:object_r:vendor_overlay_file:s0
++/(vendor|system/vendor)/package(/.*)?/app(/.*)?                     u:object_r:vendor_app_file:s0
+ 
+ # same-process HAL files and their dependencies
+ #
+-/vendor/lib(64)?/hw/gralloc\.msm8998\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/android\.hardware\.graphics\.mapper@2\.0-impl-qti-display\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/vendor\.qti\.hardware\.display\.mapper@1\.0\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libqdMetaData\.so         u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libqservice\.so           u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libqdutils\.so            u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libadreno_utils\.so       u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libgsl\.so                u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/android\.hardware\.graphics\.mapper@2\.0-impl-qti-display\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/vendor\.qti\.hardware\.display\.mapper@1\.0\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libqdMetaData\.so         u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libqservice\.so           u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libqdutils\.so            u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libadreno_utils\.so       u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libgsl\.so                u:object_r:same_process_hal_file:s0
+ 
+-/vendor/lib(64)?/hw/vulkan\.msm8998\.so    u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libEGL_adreno\.so         u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libGLESv1_CM_adreno\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libGLESv2_adreno\.so      u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libEGL_adreno\.so         u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libGLESv1_CM_adreno\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libGLESv2_adreno\.so      u:object_r:same_process_hal_file:s0
+ 
+-/vendor/lib(64)?/libdrmutils\.so           u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libdrm\.so                u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libdrmutils\.so           u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libdrm\.so                u:object_r:same_process_hal_file:s0
+ 
+-/vendor/lib(64)?/libavenhancements\.so     u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libgrallocutils\.so       u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libgralloccore\.so        u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libExtendedExtractor.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libavenhancements\.so     u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libgrallocutils\.so       u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libgralloccore\.so        u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libExtendedExtractor.so   u:object_r:same_process_hal_file:s0
+ # RenderScript dependencies.
+ # To test: run cts -m CtsRenderscriptTestCases
+-/vendor/lib(64)?/libRSDriver_adreno\.so     u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libCB\.so                  u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libllvm-qgl\.so            u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libbccQTI\.so              u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libllvm-qcom\.so           u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/librs_adreno\.so           u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/librs_adreno_sha1\.so      u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libqti-perfd-client\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libRSDriver_adreno\.so     u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libCB\.so                  u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libllvm-qgl\.so            u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libbccQTI\.so              u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libllvm-qcom\.so           u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/librs_adreno\.so           u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/librs_adreno_sha1\.so      u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libqti-perfd-client\.so    u:object_r:same_process_hal_file:s0
+ # perf-hal client lib (included by libqti-perfd-client.so)
+-/vendor/lib(64)?/vendor\.qti\.hardware\.perf@1\.0\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/vendor\.qti\.hardware\.perf@1\.0\.so    u:object_r:same_process_hal_file:s0
+ 
+ # libGLESv2_adreno depends on this
+-/vendor/lib(64)?/libllvm-glnext\.so         u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libllvm-glnext\.so         u:object_r:same_process_hal_file:s0
+ 
+ # libOpenCL and its dependencies
+-/vendor/lib(64)?/libOpenCL\.so              u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libq3dtools_adreno\.so     u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libOpenCL\.so              u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libq3dtools_adreno\.so     u:object_r:same_process_hal_file:s0
+ 
+ # hbtp dependencies
+-/vendor/lib(64)?/libhbtpitsjni\.so          u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libhbtpdbgclientjni\.so    u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libhbtpjni\.so             u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libhbtpitsjni\.so          u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libhbtpdbgclientjni\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libhbtpjni\.so             u:object_r:same_process_hal_file:s0
+ 
+ #Loaded by native loader (zygote) for all processes
+-/vendor/lib(64)?/libhalide_hexagon_host\.so u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libadsprpc\.so             u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libcdsprpc\.so             u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libsdsprpc\.so             u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libdiag\.so                u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libtime_genoff\.so         u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libhalide_hexagon_host\.so u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libadsprpc\.so             u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libcdsprpc\.so             u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libsdsprpc\.so             u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libdiag\.so                u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libtime_genoff\.so         u:object_r:same_process_hal_file:s0
+ 
+ # libmmi_jni
+-/vendor/lib(64)?/libmmi_jni\.so             u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libmmi_jni\.so             u:object_r:same_process_hal_file:s0
+ 
+ # Fastcv libs
+-/vendor/lib(64)?/libfastcvdsp_stub\.so      u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libfastcvadsp_stub\.so     u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libfastcvopt\.so           u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libfastcvdsp_stub\.so      u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libfastcvadsp_stub\.so     u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libfastcvopt\.so           u:object_r:same_process_hal_file:s0
+ 
+ # SVA files
+-/vendor/lib(64)?/liblistenjni\.so          u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/liblistensoundmodel2\.so  u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/liblistenjni\.so          u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/liblistensoundmodel2\.so  u:object_r:same_process_hal_file:s0
+ 
+ # npu files
+-/vendor/lib(64)?/libnpu\.so                u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/libaix\.so                u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libnpu\.so                u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libaix\.so                u:object_r:same_process_hal_file:s0
+ ###################################
+ # firmware images
+ #
+diff --git a/vendor/msm8937/file_contexts b/vendor/msm8937/file_contexts
+index 378ad018..cc73593c 100644
+--- a/vendor/msm8937/file_contexts
++++ b/vendor/msm8937/file_contexts
+@@ -58,11 +58,11 @@
+ ############################################################################################
+ #Same hal process libs
+ #
+-/vendor/lib(64)?/hw/gralloc\.msm8937\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/vulkan\.msm8937\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.msm8937\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/vulkan\.msm8937\.so    u:object_r:same_process_hal_file:s0
+ 
+ #For adreno libs
+-/vendor/lib(64)?/libsc-a3xx\.so                                     u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/libsc-a3xx\.so                                     u:object_r:same_process_hal_file:s0
+ ##################################
+ # non-hlos mount points
+ /firmware                  u:object_r:firmware_file:s0
+diff --git a/vendor/msm8953/file_contexts b/vendor/msm8953/file_contexts
+index 565444f4..fd1f8d48 100644
+--- a/vendor/msm8953/file_contexts
++++ b/vendor/msm8953/file_contexts
+@@ -56,8 +56,8 @@
+ ############################################################################################
+ #Same hal process libs
+ #
+-/vendor/lib(64)?/hw/gralloc\.msm8953\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/vulkan\.msm8953\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.msm8953\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/vulkan\.msm8953\.so    u:object_r:same_process_hal_file:s0
+ ##################################
+ # non-hlos mount points
+ /firmware                  u:object_r:firmware_file:s0
+diff --git a/vendor/msm8996/file_contexts b/vendor/msm8996/file_contexts
+index ab25dfa3..0a135c43 100644
+--- a/vendor/msm8996/file_contexts
++++ b/vendor/msm8996/file_contexts
+@@ -102,8 +102,8 @@
+ ############################################################################################
+ #Same hal process libs
+ #
+-/vendor/lib(64)?/hw/gralloc\.msm8996\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/vulkan\.msm8996\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.msm8996\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/vulkan\.msm8996\.so    u:object_r:same_process_hal_file:s0
+ 
+ ##################################
+ # non-hlos mount points
+diff --git a/vendor/msm8998/file_contexts b/vendor/msm8998/file_contexts
+index 2ba34c1e..90d3a1e9 100644
+--- a/vendor/msm8998/file_contexts
++++ b/vendor/msm8998/file_contexts
+@@ -50,6 +50,10 @@
+ /dev/block/platform/soc/1da4000.ufshc/by-name/rawdump                            u:object_r:rawdump_block_device:s0
+ /sys/kernel/dload/emmc_dload                                                     u:object_r:sysfs_emmc_dload:s0
+ 
++#Same hal process libs
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.msm8998\.so        u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/vulkan\.msm8998\.so         u:object_r:same_process_hal_file:s0
++
+ # A/B partitions.
+ /dev/block/platform/soc/1da4000.ufshc/by-name/abl_[ab]          u:object_r:custom_ab_block_device:s0
+ /dev/block/platform/soc/1da4000.ufshc/by-name/apdp_[ab]         u:object_r:custom_ab_block_device:s0
+diff --git a/vendor/sdm660/file_contexts b/vendor/sdm660/file_contexts
+index d2766120..968b8b42 100644
+--- a/vendor/sdm660/file_contexts
++++ b/vendor/sdm660/file_contexts
+@@ -147,7 +147,7 @@
+ ############################################################################################
+ #Same hal process libs
+ #
+-/vendor/lib(64)?/hw/gralloc\.sdm660\.so   u:object_r:same_process_hal_file:s0
+-/vendor/lib(64)?/hw/vulkan\.sdm660\.so    u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/gralloc\.sdm660\.so   u:object_r:same_process_hal_file:s0
++/(vendor|system/vendor)/lib(64)?/hw/vulkan\.sdm660\.so    u:object_r:same_process_hal_file:s0
+ #sysfs
+ /sys/devices/soc/caa0000.qcom,jpeg/video4linux/video[0-33]/name(/.*)?   u:object_r:sysfs_jpeg:s0
+-- 
+2.19.1
+
+
+From 086ed6a843f519b91b45c1dbebeb292baca709eb Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mkbestas@lineageos.org>
+Date: Tue, 8 Aug 2017 21:18:48 +0300
+Subject: [PATCH 02/12] Use set_prop() macro for property sets
+
+Change-Id: Id67a05f8ed718cad5856613c2700f4ce1e404cf0
+---
+ private/mirrorlink.te               |  4 ++--
+ private/wfdservice.te               |  3 ---
+ vendor/apq8098_latv/init_shell.te   |  2 +-
+ vendor/common/fidodaemon.te         |  3 ---
+ vendor/common/hal_display_color.te  |  2 +-
+ vendor/common/hal_sensors.te        |  2 +-
+ vendor/common/hal_telephony.te      |  2 +-
+ vendor/common/init_shell.te         |  2 +-
+ vendor/common/location.te           |  4 ++--
+ vendor/common/mirrorlink.te         |  2 +-
+ vendor/common/nqnfcinfo.te          |  2 +-
+ vendor/common/peripheral_manager.te |  2 +-
+ vendor/common/poweroffalarm_app.te  |  2 +-
+ vendor/common/qcomsysd.te           |  2 +-
+ vendor/common/qdma_app.te           |  2 +-
+ vendor/common/qdmastatsd.te         |  2 +-
+ vendor/common/qseecomd.te           |  2 --
+ vendor/common/qseeproxy.te          |  3 ---
+ vendor/common/qti_logkit_app.te     |  2 +-
+ vendor/common/recovery.te           |  2 +-
+ vendor/common/system_app.te         | 15 ++++++---------
+ vendor/common/system_server.te      | 17 +++++++----------
+ vendor/common/wcnss_filter.te       |  2 +-
+ vendor/common/wcnss_service.te      |  4 ++--
+ vendor/common/wifi_ftmd.te          |  4 ++--
+ vendor/common/wigighalsvc.te        |  2 +-
+ vendor/common/zygote.te             |  3 ++-
+ vendor/msm8937/init_shell.te        |  7 +++----
+ vendor/msm8953/init_shell.te        |  5 ++---
+ vendor/msm8996/init_shell.te        |  2 +-
+ vendor/msm8998/init_shell.te        |  2 +-
+ vendor/msmsteppe/init_shell.te      |  6 ++----
+ vendor/sdm660/init_shell.te         |  6 +++---
+ vendor/sdm710/init_shell.te         |  4 +---
+ vendor/test/fidotest.te             |  3 ---
+ vendor/test/qseeproxysample.te      |  3 ---
+ 36 files changed, 52 insertions(+), 80 deletions(-)
+
+diff --git a/private/mirrorlink.te b/private/mirrorlink.te
+index b9684286..8a21fe52 100644
+--- a/private/mirrorlink.te
++++ b/private/mirrorlink.te
+@@ -82,8 +82,8 @@ hal_client_domain(mirrorlink, hal_graphics_composer);
+ hal_client_domain(mirrorlink, hal_graphics_allocator);
+ 
+ # Allow RW access to USB properties.
+-set_prop(mirrorlink, exported_system_radio_prop);
+-get_prop(mirrorlink, system_prop);
++set_prop(mirrorlink, exported_system_radio_prop)
++get_prop(mirrorlink, system_prop)
+ 
+ # Allow access to usb ncm state from net
+ allow mirrorlink sysfs_net:dir r_dir_perms;
+diff --git a/private/wfdservice.te b/private/wfdservice.te
+index c9d48257..6eb09435 100644
+--- a/private/wfdservice.te
++++ b/private/wfdservice.te
+@@ -68,9 +68,6 @@ allow wfdservice graphics_device:chr_file rw_file_perms;
+ #Allow access to encoder for YUV statistics
+ allow wfdservice gpu_device:chr_file rw_file_perms;
+ 
+-#Allow communication with init over property server
+-unix_socket_connect(wfdservice, property, init);
+-
+ #Allow access to /dev/video/* devices for encoding/decoding
+ allow wfdservice video_device:chr_file rw_file_perms;
+ allow wfdservice video_device:dir r_dir_perms;
+diff --git a/vendor/apq8098_latv/init_shell.te b/vendor/apq8098_latv/init_shell.te
+index 32fe1779..77a8fbb8 100644
+--- a/vendor/apq8098_latv/init_shell.te
++++ b/vendor/apq8098_latv/init_shell.te
+@@ -30,7 +30,7 @@ allow qti_init_shell regionalization_file:dir r_dir_perms;
+ allow qti_init_shell regionalization_file:file create_file_perms;
+ 
+ # For VR
+-allow qti_init_shell ctl_qvrd_prop:property_service set;
++set_prop(qti_init_shell, ctl_qvrd_prop)
+ allow qti_init_shell sysfs_cpu_boost:dir r_dir_perms;
+ allow qti_init_shell sysfs_cpu_boost:file rw_file_perms;
+ allow qti_init_shell sysfs_devfreq:lnk_file r_file_perms;
+diff --git a/vendor/common/fidodaemon.te b/vendor/common/fidodaemon.te
+index 79fb1515..a8f754d8 100644
+--- a/vendor/common/fidodaemon.te
++++ b/vendor/common/fidodaemon.te
+@@ -17,9 +17,6 @@ binder_call(fidodaemon, system_app)
+ #Allow fidodaemon to be registered with service manager
+ allow fidodaemon fidodaemon_service:service_manager add;
+ 
+-#Allow communication with init over property server
+-unix_socket_connect(fidodaemon, property, init);
+-
+ #Allow access to tee device
+ allow fidodaemon tee_device:chr_file rw_file_perms;
+ 
+diff --git a/vendor/common/hal_display_color.te b/vendor/common/hal_display_color.te
+index 8efc8561..51a2ab31 100644
+--- a/vendor/common/hal_display_color.te
++++ b/vendor/common/hal_display_color.te
+@@ -52,4 +52,4 @@ add_hwservice(hal_display_color_server, hal_display_postproc_hwservice)
+ allow hal_display_postproc_client hal_display_postproc_hwservice:hwservice_manager find;
+ 
+ # Set vendor_qdcmss property
+-set_prop(hal_display_color, vendor_qdcmss_prop);
++set_prop(hal_display_color, vendor_qdcmss_prop)
+diff --git a/vendor/common/hal_sensors.te b/vendor/common/hal_sensors.te
+index e0ef6648..597d65b6 100644
+--- a/vendor/common/hal_sensors.te
++++ b/vendor/common/hal_sensors.te
+@@ -30,7 +30,7 @@ userdebug_or_eng(`
+     diag_use(hal_sensors)
+     allow hal_sensors debugfs_tracing:file { open write };
+ ')
+-set_prop(hal_sensors, slpi_prop);
++set_prop(hal_sensors, slpi_prop)
+ allow hal_sensors self:{ socket qipcrtr_socket } create_socket_perms;
+ allowxperm hal_sensors self:{ socket qipcrtr_socket } ioctl msm_sock_ipc_ioctls;
+ allow hal_sensors sysfs_socinfo:file r_file_perms;
+diff --git a/vendor/common/hal_telephony.te b/vendor/common/hal_telephony.te
+index b134fad5..194ceba8 100644
+--- a/vendor/common/hal_telephony.te
++++ b/vendor/common/hal_telephony.te
+@@ -25,4 +25,4 @@
+ #OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ #IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+-set_prop(hal_telephony_server, vendor_radio_prop);
++set_prop(hal_telephony_server, vendor_radio_prop)
+diff --git a/vendor/common/init_shell.te b/vendor/common/init_shell.te
+index 5f26b4bd..d67db345 100644
+--- a/vendor/common/init_shell.te
++++ b/vendor/common/init_shell.te
+@@ -196,7 +196,7 @@ allow qti_init_shell sysfs_cpu_boost:file w_file_perms;
+ allow qti_init_shell vendor_mbn_data_file:dir create_dir_perms;
+ allow qti_init_shell vendor_mbn_data_file:file create_file_perms;
+ 
+-set_prop(qti_init_shell, vendor_rild_libpath_prop);
++set_prop(qti_init_shell, vendor_rild_libpath_prop)
+ set_prop(qti_init_shell, ctl_vendor_hbtp_prop)
+ set_prop(qti_init_shell, vendor_radio_prop)
+ 
+diff --git a/vendor/common/location.te b/vendor/common/location.te
+index a9ae58b7..5b4dca70 100644
+--- a/vendor/common/location.te
++++ b/vendor/common/location.te
+@@ -64,7 +64,7 @@ allow location hal_gnss_qti:unix_dgram_socket sendto;
+ netmgr_socket(location);
+ 
+ #Allow access to properties
+-set_prop(location, location_prop);
++set_prop(location, location_prop)
+ 
+ #diag
+ userdebug_or_eng(`
+@@ -102,4 +102,4 @@ get_prop(location, vendor_wifi_prop)
+ allow location self:capability2 wake_alarm;
+ 
+ #allow qdma prop
+-get_prop(location, vendor_qdma_prop);
++get_prop(location, vendor_qdma_prop)
+diff --git a/vendor/common/mirrorlink.te b/vendor/common/mirrorlink.te
+index 85c13ac2..d65f31be 100644
+--- a/vendor/common/mirrorlink.te
++++ b/vendor/common/mirrorlink.te
+@@ -26,7 +26,7 @@
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ # Allow read access to mirrorlink specific property type.
+-get_prop(mirrorlink, vendor_mirrorlink_prop);
++get_prop(mirrorlink, vendor_mirrorlink_prop)
+ 
+ # Allow read access to udc connection state
+ allow mirrorlink sysfs_usb_controller:dir r_dir_perms;
+diff --git a/vendor/common/nqnfcinfo.te b/vendor/common/nqnfcinfo.te
+index 814b2f51..fb5a6079 100644
+--- a/vendor/common/nqnfcinfo.te
++++ b/vendor/common/nqnfcinfo.te
+@@ -33,7 +33,7 @@ init_daemon_domain(nqnfcinfo)
+ 
+ r_dir_file(nqnfcinfo, sysfs_socinfo);
+ 
+-set_prop(nqnfcinfo, nfc_nq_prop);
++set_prop(nqnfcinfo, nfc_nq_prop)
+ 
+ # Access device nodes inside /dev/nq-nci
+ allow nqnfcinfo nfc_device:chr_file rw_file_perms;
+diff --git a/vendor/common/peripheral_manager.te b/vendor/common/peripheral_manager.te
+index c47af7c1..68a964e9 100644
+--- a/vendor/common/peripheral_manager.te
++++ b/vendor/common/peripheral_manager.te
+@@ -28,4 +28,4 @@ r_dir_file(vendor_per_mgr, sysfs)
+ allow vendor_per_mgr sysfs_data:file r_file_perms;
+ 
+ # Set the peripheral state property
+-set_prop(vendor_per_mgr, vendor_per_mgr_state_prop);
++set_prop(vendor_per_mgr, vendor_per_mgr_state_prop)
+diff --git a/vendor/common/poweroffalarm_app.te b/vendor/common/poweroffalarm_app.te
+index 2401d98d..a8b9ca15 100644
+--- a/vendor/common/poweroffalarm_app.te
++++ b/vendor/common/poweroffalarm_app.te
+@@ -45,6 +45,6 @@ allow poweroffalarm_app surfaceflinger_service:service_manager find;
+ allow poweroffalarm_app audioserver_service:service_manager find;
+ allow poweroffalarm_app mediaserver_service:service_manager find;
+ 
+-get_prop(poweroffalarm_app, vendor_alarm_boot_prop);
++get_prop(poweroffalarm_app, vendor_alarm_boot_prop)
+ 
+ get_prop(poweroffalarm_app, vendor_iop_prop)
+diff --git a/vendor/common/qcomsysd.te b/vendor/common/qcomsysd.te
+index 9d71cb9f..4cd44232 100755
+--- a/vendor/common/qcomsysd.te
++++ b/vendor/common/qcomsysd.te
+@@ -22,7 +22,7 @@ allow vendor_qcomsysd self:capability { sys_boot };
+ allow vendor_qcomsysd self:qipcrtr_socket create_socket_perms_no_ioctl;
+ use_vendor_per_mgr(vendor_qcomsysd);
+ #allow qcomsysd access boot mode switch
+-set_prop(vendor_qcomsysd, vendor_boot_mode_prop);
++set_prop(vendor_qcomsysd, vendor_boot_mode_prop)
+ 
+ #diag
+ userdebug_or_eng(`
+diff --git a/vendor/common/qdma_app.te b/vendor/common/qdma_app.te
+index ce7aaddf..bcea2bdf 100644
+--- a/vendor/common/qdma_app.te
++++ b/vendor/common/qdma_app.te
+@@ -70,4 +70,4 @@ allow qdma_app system_app_data_file:dir create_dir_perms;
+ allow qdma_app system_app_data_file:file create_file_perms;
+ 
+ # allow qdma_prop
+-set_prop(qdma_app, vendor_qdma_prop);
++set_prop(qdma_app, vendor_qdma_prop)
+diff --git a/vendor/common/qdmastatsd.te b/vendor/common/qdmastatsd.te
+index 239b90c6..d2e8507d 100644
+--- a/vendor/common/qdmastatsd.te
++++ b/vendor/common/qdmastatsd.te
+@@ -105,4 +105,4 @@ userdebug_or_eng(`
+ #read_logd(qdmastatsd);
+ 
+ # allow qdma_prop
+-set_prop(qdmastatsd, vendor_qdma_prop);
++set_prop(qdmastatsd, vendor_qdma_prop)
+diff --git a/vendor/common/qseecomd.te b/vendor/common/qseecomd.te
+index fbad4609..7bb9d604 100644
+--- a/vendor/common/qseecomd.te
++++ b/vendor/common/qseecomd.te
+@@ -55,8 +55,6 @@ allow tee sysfs_securetouch:file rw_file_perms;
+ binder_call(tee, surfaceflinger)
+ #binder_use(tee)
+ 
+-#allow tee system_app:unix_dgram_socket sendto;
+-unix_socket_connect(tee, property, init)
+ 
+ userdebug_or_eng(`
+   allow tee su:unix_dgram_socket sendto;
+diff --git a/vendor/common/qseeproxy.te b/vendor/common/qseeproxy.te
+index 12517fb3..7008ba40 100644
+--- a/vendor/common/qseeproxy.te
++++ b/vendor/common/qseeproxy.te
+@@ -43,9 +43,6 @@ allow qseeproxy qseeproxy_service:service_manager add;
+ #Allow qseeproxy to use system_server via binder to check caller identity
+ binder_call(qseeproxy, system_server)
+ 
+-#Allow communication with init over property server
+-unix_socket_connect(qseeproxy, property, init);
+-
+ #Allow access to tee device
+ allow qseeproxy tee_device:chr_file rw_file_perms;
+ 
+diff --git a/vendor/common/qti_logkit_app.te b/vendor/common/qti_logkit_app.te
+index f94c280c..52640a1f 100644
+--- a/vendor/common/qti_logkit_app.te
++++ b/vendor/common/qti_logkit_app.te
+@@ -71,7 +71,7 @@ allow qti_logkit_app qti_logkit_pub_data_file:file create_file_perms;
+ allow qti_logkit_app wcnss_service_exec:file rx_file_perms;
+ 
+ # bugreport
+-allow qti_logkit_app ctl_dumpstate_prop:property_service set;
++set_prop(qti_logkit_app, ctl_dumpstate_prop)
+ unix_socket_connect(qti_logkit_app, dumpstate, dumpstate)
+ 
+ # ANR
+diff --git a/vendor/common/recovery.te b/vendor/common/recovery.te
+index 7c86b272..2d23f9fd 100755
+--- a/vendor/common/recovery.te
++++ b/vendor/common/recovery.te
+@@ -22,6 +22,6 @@ recovery_only(`
+     # Enable adb on configfs devices
+     allow recovery configfs:file rw_file_perms;
+     allow recovery configfs:dir rw_dir_perms;
+-    set_prop(recovery, ffs_prop);
++    set_prop(recovery, ffs_prop)
+     get_prop(recovery, vendor_boot_mode_prop)
+ ')
+diff --git a/vendor/common/system_app.te b/vendor/common/system_app.te
+index 05d10ada..78229acb 100644
+--- a/vendor/common/system_app.te
++++ b/vendor/common/system_app.te
+@@ -28,10 +28,8 @@ allow system_app fm_radio_device:chr_file r_file_perms;
+ r_dir_file(system_app, bluetooth_data_file);
+ r_dir_file(system_app, bt_firmware_file);
+ 
+-allow system_app {
+-    fm_prop
+-    usf_prop
+-}:property_service set;
++set_prop(system_app, fm_prop)
++set_prop(system_app, usf_prop)
+ 
+ allow system_app {
+     atfwd_service
+@@ -65,7 +63,7 @@ allow system_app bluetooth:unix_stream_socket ioctl;
+ hal_client_domain(system_app, hal_hbtp)
+ 
+ #access to wifi_ftmd
+-allow system_app vendor_wifi_ftmd_prop:property_service set;
++set_prop(system_app, vendor_wifi_ftmd_prop)
+ #unix_socket_send(system_app, wififtmd, wifi_ftmd)
+ 
+ # allow system_app to interact with dtseagleservice
+@@ -123,7 +121,7 @@ allow system_app qti_logkit_priv_socket:dir r_dir_perms;
+ #allow system_app qti_logkit_priv_socket:sock_file r_file_perms;
+ 
+ # bugreport
+-allow system_app ctl_dumpstate_prop:property_service set;
++set_prop(system_app, ctl_dumpstate_prop)
+ unix_socket_connect(system_app, dumpstate, dumpstate)
+ 
+ # allow gba auth service to add itself as system service
+@@ -183,19 +181,18 @@ hal_client_domain(system_app, hal_perf)
+ 
+ #allow system app to interact with the esepowermanager
+ hal_client_domain(system_app, hal_esepowermanager)
+-allow system_app fm_prop:file r_file_perms;
+ 
+ #allow system_app access factory
+ hal_client_domain(system_app, vendor_hal_factory_qti);
+ 
+ #Wi-Fi Display
+-set_prop(system_app, wfd_service_prop);
++set_prop(system_app, wfd_service_prop)
+ userdebug_or_eng(`
+ allow system_app wfd_debug_prop:file r_file_perms;
+ ')
+ 
+ # allow system app to set mirrorlink prop
+-set_prop(system_app, vendor_mirrorlink_prop);
++set_prop(system_app, vendor_mirrorlink_prop)
+ 
+ #secureUI
+ hal_client_domain(system_app, hal_qdutils_disp);
+diff --git a/vendor/common/system_server.te b/vendor/common/system_server.te
+index 909308ee..447cfdc7 100644
+--- a/vendor/common/system_server.te
++++ b/vendor/common/system_server.te
+@@ -30,10 +30,8 @@ allow system_server {
+ allow system_server qtitetherservice_service:service_manager find;
+ 
+ #For ANT tty communication and to set wc_transport prop
+-allow system_server {
+-    vendor_bluetooth_prop
+-    usf_prop
+-}:property_service set;
++set_prop(system_server, vendor_bluetooth_prop)
++set_prop(system_server, usf_prop)
+ 
+ # required for ANT App to connectto wcnss_filter sockets
+ allow system_server bluetooth:unix_stream_socket connectto;
+@@ -57,7 +55,7 @@ type_transition system_server location_data_file:sock_file location_socket "alar
+ #For wifistatemachine
+ allow system_server kernel:key search;
+ allow system_server wlan_device:chr_file rw_file_perms;
+-allow system_server vendor_softap_prop:property_service set;
++set_prop(system_server, vendor_softap_prop)
+ allow system_server vendor_softap_prop:file r_file_perms;
+ 
+ #For ssr
+@@ -110,7 +108,7 @@ allow system_server qti_logkit:fd use;
+ allow system_server qti_logkit:fifo_file write;
+ 
+ #Rules for system server to talk to peripheral manager
+-get_prop(system_server, vendor_per_mgr_state_prop);
++get_prop(system_server, vendor_per_mgr_state_prop)
+ 
+ # Allow system server access to qfp daemon
+ binder_call(system_server, qfp-daemon);
+@@ -118,15 +116,14 @@ binder_call(system_server, fps_hal)
+ allow system_server iqfp_service:service_manager find;
+ 
+ # For shutdown animation
+-allow system_server ctl_bootanim_prop:property_service set;
++set_prop(system_server, ctl_bootanim_prop)
+ 
+ # allow tethering to access dhcp leases
+ r_dir_file(system_server, dhcp_data_file)
+ 
+ # Allow system server to access fst,wigig system properties
+-allow system_server fst_prop:property_service set;
+-get_prop(system_server, fst_prop);
+-set_prop(system_server, wigig_prop);
++set_prop(system_server, fst_prop)
++set_prop(system_server, wigig_prop)
+ 
+ #allow access to fingerprintd data file
+ allow system_server fingerprintd_data_file:file { r_file_perms unlink };
+diff --git a/vendor/common/wcnss_filter.te b/vendor/common/wcnss_filter.te
+index fae70de3..67c4f1f8 100644
+--- a/vendor/common/wcnss_filter.te
++++ b/vendor/common/wcnss_filter.te
+@@ -41,7 +41,7 @@ allow wcnss_filter {
+ 
+ #wakelock policy
+ wakelock_use(wcnss_filter);
+-set_prop(wcnss_filter, vendor_bluetooth_prop);
++set_prop(wcnss_filter, vendor_bluetooth_prop)
+ 
+ #For bluetooth firmware
+ r_dir_file(wcnss_filter, bt_firmware_file)
+diff --git a/vendor/common/wcnss_service.te b/vendor/common/wcnss_service.te
+index fce80cb0..bade29f4 100644
+--- a/vendor/common/wcnss_service.te
++++ b/vendor/common/wcnss_service.te
+@@ -66,10 +66,10 @@ get_prop(wcnss_service, hwservicemanager_prop)
+ hal_client_domain(wcnss_service, hal_perf)
+ 
+ # read persist.vendor.wigig.npt.enable
+-get_prop(wcnss_service, wigig_prop);
++get_prop(wcnss_service, wigig_prop)
+ 
+ # allow to read /sys/class/net file
+ r_dir_file(wcnss_service, sysfs_net);
+ 
+ # set property to vendor.wlan is enable
+-set_prop(wcnss_service, vendor_wifi_prop);
++set_prop(wcnss_service, vendor_wifi_prop)
+diff --git a/vendor/common/wifi_ftmd.te b/vendor/common/wifi_ftmd.te
+index 2f61c08d..a8a47460 100644
+--- a/vendor/common/wifi_ftmd.te
++++ b/vendor/common/wifi_ftmd.te
+@@ -31,6 +31,6 @@ init_daemon_domain(wifi_ftmd)
+ 
+ net_domain(wifi_ftmd)
+ 
+-set_prop(wifi_ftmd,vendor_wifi_ftmd_prop);
++set_prop(wifi_ftmd,vendor_wifi_ftmd_prop)
+ allow wifi_ftmd self:capability net_admin;
+-allow wifi_ftmd vendor_wifi_ftmd_prop:property_service set;
++set_prop(wifi_ftmd, vendor_wifi_ftmd_prop)
+diff --git a/vendor/common/wigighalsvc.te b/vendor/common/wigighalsvc.te
+index b978fbf0..1424706d 100644
+--- a/vendor/common/wigighalsvc.te
++++ b/vendor/common/wigighalsvc.te
+@@ -46,7 +46,7 @@ set_prop(hal_wigig, ctl_vendor_wigigsvc_prop)
+ 
+ # access wigig properties
+ # need to write vendor.wigig.driver.status
+-set_prop(hal_wigig, wigig_prop);
++set_prop(hal_wigig, wigig_prop)
+ 
+ # access wifi vendor data files
+ r_dir_file(hal_wigig, wifi_vendor_data_file)
+diff --git a/vendor/common/zygote.te b/vendor/common/zygote.te
+index 5cc8dd65..607bec8d 100644
+--- a/vendor/common/zygote.te
++++ b/vendor/common/zygote.te
+@@ -27,5 +27,6 @@
+ 
+ typeattribute zygote system_writes_vendor_properties_violators;
+ # persist.service.bdroid.bdaddr hw.cabl.level
+-allow zygote { vendor_bluetooth_prop system_prop } :property_service set;
++set_prop(zygote, vendor_bluetooth_prop)
++set_prop(zygote, system_prop)
+ get_prop(zygote, vendor_mpctl_prop)
+diff --git a/vendor/msm8937/init_shell.te b/vendor/msm8937/init_shell.te
+index 1eb0a315..976c915a 100644
+--- a/vendor/msm8937/init_shell.te
++++ b/vendor/msm8937/init_shell.te
+@@ -25,10 +25,9 @@
+ # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
++# media_msm8937_version_prop - to choose target version specific media_codecs.xml
++set_prop(qti_init_shell, vendor_media_msm8937_version_prop)
++
+ # For regionalization
+ allow qti_init_shell regionalization_file:dir r_dir_perms;
+ allow qti_init_shell regionalization_file:file create_file_perms;
+-
+-allow qti_init_shell {
+-    vendor_media_msm8937_version_prop
+-}:property_service set;
+diff --git a/vendor/msm8953/init_shell.te b/vendor/msm8953/init_shell.te
+index 47784574..143a5ee6 100644
+--- a/vendor/msm8953/init_shell.te
++++ b/vendor/msm8953/init_shell.te
+@@ -25,9 +25,8 @@
+ # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+-allow qti_init_shell {
+-    vendor_media_msm8953_version_prop
+-}:property_service set;
++# media_msm8953_version_prop - to choose target version specific media_codecs.xml
++set_prop(qti_init_shell, vendor_media_msm8953_version_prop)
+ 
+ # For regionalization
+ allow qti_init_shell regionalization_file:dir r_dir_perms;
+diff --git a/vendor/msm8996/init_shell.te b/vendor/msm8996/init_shell.te
+index 5546fa1a..e2995e5c 100644
+--- a/vendor/msm8996/init_shell.te
++++ b/vendor/msm8996/init_shell.te
+@@ -25,4 +25,4 @@
+ # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+-allow qti_init_shell ctl_qvrd_prop:property_service set;
++set_prop(qti_init_shell, ctl_qvrd_prop)
+diff --git a/vendor/msm8998/init_shell.te b/vendor/msm8998/init_shell.te
+index c0e5dd44..0b267e8f 100644
+--- a/vendor/msm8998/init_shell.te
++++ b/vendor/msm8998/init_shell.te
+@@ -30,7 +30,7 @@ allow qti_init_shell regionalization_file:dir r_dir_perms;
+ allow qti_init_shell regionalization_file:file create_file_perms;
+ 
+ # For VR
+-allow qti_init_shell ctl_qvrd_prop:property_service set;
++set_prop(qti_init_shell, ctl_qvrd_prop)
+ 
+ # For LPMs
+ allow qti_init_shell sysfs_msm_power:file rw_file_perms;
+diff --git a/vendor/msmsteppe/init_shell.te b/vendor/msmsteppe/init_shell.te
+index fa5ccef9..1e138e59 100644
+--- a/vendor/msmsteppe/init_shell.te
++++ b/vendor/msmsteppe/init_shell.te
+@@ -27,7 +27,5 @@
+ 
+ # media_sm6150_version_prop - to choose target version specific media_codecs.xml
+ # media_sm7150_version_prop - to choose target version specific media_codecs.xml
+-allow qti_init_shell {
+-    vendor_media_sm6150_version_prop
+-    vendor_media_sm7150_version_prop
+-}:property_service set;
++set_prop(qti_init_shell, vendor_media_sm6150_version_prop)
++set_prop(qti_init_shell, vendor_media_sm7150_version_prop)
+diff --git a/vendor/sdm660/init_shell.te b/vendor/sdm660/init_shell.te
+index 3c09f7a5..e2610d38 100644
+--- a/vendor/sdm660/init_shell.te
++++ b/vendor/sdm660/init_shell.te
+@@ -25,12 +25,12 @@
+ # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
++# media_sdm660_version_prop - to choose target version specific media_codecs.xml
++set_prop(qti_init_shell, vendor_media_sdm660_version_prop)
++
+ # For regionalization
+ allow qti_init_shell regionalization_file:dir r_dir_perms;
+ allow qti_init_shell regionalization_file:file create_file_perms;
+ 
+ #Needed for starting cdsprpcd service post-boot
+ set_prop(qti_init_shell, vendor_cdsprpcd_prop)
+-allow qti_init_shell {
+-    vendor_media_sdm660_version_prop
+-}:property_service set;
+diff --git a/vendor/sdm710/init_shell.te b/vendor/sdm710/init_shell.te
+index 413d6a1f..98b61ee2 100644
+--- a/vendor/sdm710/init_shell.te
++++ b/vendor/sdm710/init_shell.te
+@@ -26,9 +26,7 @@
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ # media_sdm710_version_prop - to choose target version specific media_codecs.xml
+-allow qti_init_shell {
+-    vendor_media_sdm710_version_prop
+-}:property_service set;
++set_prop(qti_init_shell, vendor_media_sdm710_version_prop)
+ 
+ # For regionalization
+ allow qti_init_shell regionalization_file:dir r_dir_perms;
+diff --git a/vendor/test/fidotest.te b/vendor/test/fidotest.te
+index a331dca9..d0adb00d 100644
+--- a/vendor/test/fidotest.te
++++ b/vendor/test/fidotest.te
+@@ -17,9 +17,6 @@ userdebug_or_eng(`
+   #Allow fido test daemons to be registered with service manager
+   allow fidotest fidotest_service:service_manager add;
+ 
+-  # Allow communication with init over property server
+-  unix_socket_connect(fidotest, property, init);
+-
+   # Allow access to tee device
+   allow fidotest tee_device:chr_file rw_file_perms;
+ 
+diff --git a/vendor/test/qseeproxysample.te b/vendor/test/qseeproxysample.te
+index 1e71b7f7..381400ff 100644
+--- a/vendor/test/qseeproxysample.te
++++ b/vendor/test/qseeproxysample.te
+@@ -45,9 +45,6 @@ userdebug_or_eng(`
+   #Allow test daemon to use system_server via binder to check caller identity
+   binder_call(qseeproxysample, system_server)
+ 
+-  # Allow communication with init over property server
+-  unix_socket_connect(qseeproxysample, property, init);
+-
+   # Allow access to tee device
+   allow qseeproxysample tee_device:chr_file rw_file_perms;
+ 
+-- 
+2.19.1
+
+
+From f8eb34e2ac90fe84b7a846dc03764027800cd141 Mon Sep 17 00:00:00 2001
+From: Ethan Chen <intervigil@gmail.com>
+Date: Mon, 25 Sep 2017 23:19:30 -0700
+Subject: [PATCH 03/12] sepolicy: Allow wcnss_service to set wlan.driver
+ properties
+
+Change-Id: I83a6ed71a2281c421aba727dca313dda4eb8bd4f
+---
+ vendor/common/property.te       | 2 ++
+ vendor/common/property_contexts | 3 +++
+ vendor/common/wcnss_service.te  | 2 ++
+ 3 files changed, 7 insertions(+)
+
+diff --git a/vendor/common/property.te b/vendor/common/property.te
+index c601c363..2fc860ff 100644
+--- a/vendor/common/property.te
++++ b/vendor/common/property.te
+@@ -196,3 +196,5 @@ type adsprpc_prop, property_type;
+ 
+ #qvr property
+ type qvr_prop, property_type;
++
++type wcnss_prop, property_type;
+diff --git a/vendor/common/property_contexts b/vendor/common/property_contexts
+index 90b0246d..4d6679d6 100644
+--- a/vendor/common/property_contexts
++++ b/vendor/common/property_contexts
+@@ -258,3 +258,6 @@ vendor.fastrpc.                  u:object_r:adsprpc_prop:s0
+ 
+ #qvr properties
+ vendor.qvr                       u:object_r:qvr_prop:s0
++
++wlan.driver.ath            u:object_r:wcnss_prop:s0
++wlan.driver.config         u:object_r:wcnss_prop:s0
+diff --git a/vendor/common/wcnss_service.te b/vendor/common/wcnss_service.te
+index bade29f4..c203b89e 100644
+--- a/vendor/common/wcnss_service.te
++++ b/vendor/common/wcnss_service.te
+@@ -73,3 +73,5 @@ r_dir_file(wcnss_service, sysfs_net);
+ 
+ # set property to vendor.wlan is enable
+ set_prop(wcnss_service, vendor_wifi_prop)
++
++set_prop(wcnss_service, wcnss_prop)
+-- 
+2.19.1
+
+
+From 3950e28789426bf3cf19f2dd57b2a65022124581 Mon Sep 17 00:00:00 2001
+From: LuK1337 <priv.luk@gmail.com>
+Date: Sun, 17 Dec 2017 01:30:42 +0100
+Subject: [PATCH 04/12] sepolicy: Allow system_server to 'read' qti_debugfs
+
+Change-Id: If9657b93d7c92c4737d21e7f84a5ee1dbf4135de
+---
+ vendor/common/system_server.te | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/vendor/common/system_server.te b/vendor/common/system_server.te
+index 447cfdc7..0e75248c 100644
+--- a/vendor/common/system_server.te
++++ b/vendor/common/system_server.te
+@@ -197,3 +197,5 @@ hal_client_domain(system_server, hal_wifilearner)
+ r_dir_file(system_server, kgsl_debugfs);
+ 
+ allow system_server { system_app_data_file bluetooth_data_file nfc_data_file radio_data_file shell_data_file app_data_file }:file map;
++
++allow system_server qti_debugfs:file r_file_perms;
+-- 
+2.19.1
+
+
+From d2bce0125c98dde96848b25fa689afa79c0c0a40 Mon Sep 17 00:00:00 2001
+From: YumeMichi <do4suki@gmail.com>
+Date: Thu, 8 Feb 2018 17:32:55 +0800
+Subject: [PATCH 05/12] sepolicy: Label mpctl_socket as data_file_type
+
+* ERROR: The following types on /data/ must be associated
+  with the "data_file_type" attribute: mpctl_socket
+
+Change-Id: I2b1aa10646e455899d4e25162510fe9298408c44
+Signed-off-by: YumeMichi <do4suki@gmail.com>
+---
+ vendor/common/file.te | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/common/file.te b/vendor/common/file.te
+index 76ba2f9f..c71ac939 100644
+--- a/vendor/common/file.te
++++ b/vendor/common/file.te
+@@ -114,7 +114,7 @@ type sysfs_poweron_alarm, sysfs_type, fs_type;
+ type sysfs_mpdecision, fs_type, sysfs_type;
+ type sysfs_rqstats, fs_type, sysfs_type;
+ type sysfs_cpu_online, fs_type, sysfs_type;
+-type mpctl_socket, file_type, mlstrustedobject;
++type mpctl_socket, file_type, data_file_type, mlstrustedobject;
+ type mpctl_data_file, file_type, data_file_type;
+ 
+ #Define the files used by lm
+-- 
+2.19.1
+
+
+From b4692631e8eb2d3c74ee51dbece2b94bb73ca4db Mon Sep 17 00:00:00 2001
+From: Nirmal Abraham <nabrah@codeaurora.org>
+Date: Thu, 16 Nov 2017 16:04:52 +0530
+Subject: [PATCH 06/12] sepolicy: rules to allow camera daemon access to app
+ buffer
+
+Add rule to allow mm-qcamera daemon to import the fd which
+is allocated in app's context.
+
+Change-Id: Icdc13cf34cef98a2529b79ee61900b5130585b0d
+
+sepolicy: Allow camera daemon to access priv_app buffer.
+
+Add rule to allow mm-qcamera daemon to import the fd which
+is allocated in app's context. This is required for VT call
+camera preview to work.
+
+Change-Id: Iea4d82a44f42715ca888960549494e788dd99563
+CRs-Fixed: 2133945
+
+[mikeioannina]: Move to common sepolicy
+
+Change-Id: I6e1c48df94b31132f5b1f9afa3a07ccc3c4aab4d
+---
+ vendor/common/mm-qcamerad.te | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/common/mm-qcamerad.te b/vendor/common/mm-qcamerad.te
+index 4369cf3d..07f93b8b 100644
+--- a/vendor/common/mm-qcamerad.te
++++ b/vendor/common/mm-qcamerad.te
+@@ -36,7 +36,7 @@ allow mm-qcamerad self:process execmem;
+ allow mm-qcamerad video_device:dir r_dir_perms;
+ allow mm-qcamerad { gpu_device video_device sensors_device }:chr_file rw_file_perms;
+ 
+-allow mm-qcamerad { surfaceflinger mediaserver cameraserver hal_camera }:fd use;
++allow mm-qcamerad { surfaceflinger mediaserver cameraserver hal_camera untrusted_app_all priv_app }:fd use;
+ 
+ #allow mm-qcamerad camera_data_file:sock_file { create unlink };
+ 
+-- 
+2.19.1
+
+
+From 307ce19cdd1b033684ab47cc32e65bc69c5c718a Mon Sep 17 00:00:00 2001
+From: Subash Abhinov Kasiviswanathan <subashab@codeaurora.org>
+Date: Mon, 12 Jun 2017 18:16:14 -0600
+Subject: [PATCH 07/12] hal_gnss_default: Do not log udp socket failures
+
+hal_gnss_default uses data services API's to use data related
+functionality for SUPL/E911 call. This was internally using
+internet datagram sockets for IOCTL calls to retrieve interface
+name leading to this denial. Since HAL is not supposed to have
+this permission, use netlink route sockets instead to achieve
+this functionality.
+
+Fixes the following denial -
+
+audit(0.0:94): avc: denied { create } for comm="Loc_hal_worker"
+scontext=u:r:hal_gnss_default:s0 tcontext=u:r:hal_gnss_default:s0
+tclass=udp_socket permissive=0
+
+BUG:37730994
+Change-Id: If358032ffcf870747d6bca4fa50fb45214d70f8c
+---
+ common/hal_gnss_default.te | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+ create mode 100644 common/hal_gnss_default.te
+
+diff --git a/common/hal_gnss_default.te b/common/hal_gnss_default.te
+new file mode 100644
+index 00000000..668b2017
+--- /dev/null
++++ b/common/hal_gnss_default.te
+@@ -0,0 +1,9 @@
++# Most HALs are not allowed to use network sockets. Qcom library
++# libqdi is used across multiple processes which are clients of
++# netmgrd including the GNSS HAL. libqdi first attempts to get the network
++# interface using an IOCTL on a UDP INET socket, which isn't allowed here.
++# If that fails, it falls back to using libc's if_nameindex() which requires
++# a netlink route socket, which HALs may use. Due to the initial
++# attempt to use a UDP socket, we still see a selinux denial,
++# but it is safe to ignore.
++dontaudit hal_gnss_default self:udp_socket create;
+-- 
+2.19.1
+
+
+From 29155360ffcd1d621bc41e738637a306dc809ec7 Mon Sep 17 00:00:00 2001
+From: jrior001 <jriordan001@gmail.com>
+Date: Wed, 9 May 2018 22:54:17 -0400
+Subject: [PATCH 08/12] sepolicy: qti_init_shell needs to read dir too
+
+Change-Id: I35e8bbffb44626c95f3d59adb4d97bc07da043a4
+---
+ vendor/common/init_shell.te | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/common/init_shell.te b/vendor/common/init_shell.te
+index d67db345..15196cc9 100644
+--- a/vendor/common/init_shell.te
++++ b/vendor/common/init_shell.te
+@@ -185,7 +185,7 @@ allow qti_init_shell sysfs_zram:file w_file_perms;
+ allow qti_init_shell sysfs_kgsl:file { r_file_perms setattr };
+ 
+ allow qti_init_shell proc:file r_file_perms;
+-allow qti_init_shell rootfs:file r_file_perms;
++r_dir_file(qti_init_shell, rootfs)
+ 
+ r_dir_file(qti_init_shell, sysfs_devfreq)
+ allow qti_init_shell sysfs_devfreq:file w_file_perms;
+-- 
+2.19.1
+
+
+From e4d8c29d3cb33834a9bc3643170e81c010e5f74f Mon Sep 17 00:00:00 2001
+From: jrior001 <jriordan001@gmail.com>
+Date: Wed, 9 May 2018 22:55:00 -0400
+Subject: [PATCH 09/12] sepolicy: allow vold to read persist dirs
+
+Change-Id: Ibff5485fcaebc181d9aa17fcea38cf4ae3146193
+---
+ vendor/common/vold.te | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/vendor/common/vold.te b/vendor/common/vold.te
+index 48411ebf..c64372b9 100755
+--- a/vendor/common/vold.te
++++ b/vendor/common/vold.te
+@@ -10,3 +10,5 @@ allow vold cache_recovery_file:file create_file_perms;
+ allow vold { proc_sysrq proc_dirty_ratio }:file rw_file_perms;
+ wakelock_use(vold)
+ allow vold swap_block_device:blk_file r_file_perms;
++
++allow vold persist_file:dir r_dir_perms;
+-- 
+2.19.1
+
+
+From 120b55b342628bed8f13f3c3de689c380d9b0866 Mon Sep 17 00:00:00 2001
+From: Bruno Martins <bgcngm@gmail.com>
+Date: Mon, 4 Jun 2018 21:02:56 +0100
+Subject: [PATCH 10/12] sepolicy: Fix video4linux "name" node labeling
+
+Do u even regex, br0?
+
+Change-Id: If907448d394f967268c9f72051bec5a47220087b
+---
+ vendor/common/file_contexts | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/vendor/common/file_contexts b/vendor/common/file_contexts
+index e60d6afe..db39dfed 100644
+--- a/vendor/common/file_contexts
++++ b/vendor/common/file_contexts
+@@ -454,11 +454,11 @@
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap             u:object_r:sysfs_graphics:s0
+ /sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap            u:object_r:sysfs_graphics:s0
+ /sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/caps                      u:object_r:sysfs_graphics:s0
+-/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_cam/video4linux/video[0-33]/name(/.*)?   u:object_r:sysfs_graphics:s0
+-/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_rotator/video4linux/video[0-33]/name(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_cam/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_rotator/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_rotator/caps       u:object_r:sysfs_graphics:s0
+-/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,vidc/video4linux/video[0-33]/name(/.*)?   u:object_r:sysfs_graphics:s0
+-/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,cci/[a-z0-9]+.qcom,cci:qcom,camera@[0-2]/video4linux/video[0-33]/name(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,vidc/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+.qcom,cci/[a-z0-9]+.qcom,cci:qcom,camera@[0-2]/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/bus/platform/drivers/xhci_msm_hsic(/.*)?                       u:object_r:sysfs_hsic:s0
+ /sys/devices/msm_hsic_host/host_ready                               u:object_r:sysfs_hsic_host_rdy:s0
+ /sys/bus/esoc(/.*)?                                                 u:object_r:sysfs_esoc:s0
+-- 
+2.19.1
+
+
+From d3f7c55403445c29959f9595f38bb418eec4277c Mon Sep 17 00:00:00 2001
+From: Bruno Martins <bgcngm@gmail.com>
+Date: Mon, 4 Jun 2018 21:11:32 +0100
+Subject: [PATCH 11/12] sepolicy: Allow mm-qcamerad to access v4L "name" node
+
+ * Label additional nodes and add it as common rule, since it doesn't
+   apply only to msm8953.
+
+Change-Id: I42b329d782795feed776b09d5c12d89be9bac868
+---
+ vendor/common/file_contexts  | 2 ++
+ vendor/common/mm-qcamerad.te | 3 +++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/vendor/common/file_contexts b/vendor/common/file_contexts
+index db39dfed..f7b5b08c 100644
+--- a/vendor/common/file_contexts
++++ b/vendor/common/file_contexts
+@@ -454,6 +454,8 @@
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap             u:object_r:sysfs_graphics:s0
+ /sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap            u:object_r:sysfs_graphics:s0
+ /sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/caps                      u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+\.qcom,fd/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices(/platform)?/soc/[a-z0-9]+\.qcom,msm-cam/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_cam/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_rotator/video4linux/video[0-9]+/name(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_rotator/caps       u:object_r:sysfs_graphics:s0
+diff --git a/vendor/common/mm-qcamerad.te b/vendor/common/mm-qcamerad.te
+index 07f93b8b..452b0dd7 100644
+--- a/vendor/common/mm-qcamerad.te
++++ b/vendor/common/mm-qcamerad.te
+@@ -77,3 +77,6 @@ allow mm-qcamerad self:socket create_socket_perms;
+ allowxperm mm-qcamerad self:socket ioctl msm_sock_ipc_ioctls;
+ 
+ allow mm-qcamerad sysfs_data:file r_file_perms;
++
++#for v4L node "name" access
++allow mm-qcamerad sysfs_graphics:file rw_file_perms;
+-- 
+2.19.1
+
+
+From 3dda9d68dc0e206fe7997ec5d88790ad42a7cf75 Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mkbestas@lineageos.org>
+Date: Tue, 12 Jun 2018 21:35:33 +0300
+Subject: [PATCH 12/12] common: Fix labelling of lcd-backlight
+
+* Codeaurora strikes again with a wrong regex
+
+Change-Id: Id1be8ab8c264f05d3c1ddd3c622495a220fd074f
+---
+ vendor/common/file_contexts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vendor/common/file_contexts b/vendor/common/file_contexts
+index f7b5b08c..5f1342cf 100644
+--- a/vendor/common/file_contexts
++++ b/vendor/common/file_contexts
+@@ -448,7 +448,7 @@
+ /sys/devices/platform/soc/ae00000.qcom,mdss_mdp/backlight(/.*)?     u:object_r:sysfs_graphics:s0
+ /sys/devices/virtual/switch/hdmi(/.*)?                              u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_mdp/[a-z0-9]+.qcom,mdss_mdp:qcom,mdss_fb_primary/leds/lcd-backlight(/.*)?   u:object_r:sysfs_graphics:s0
+-/sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/qcom,mdss_fb_primary.+[a-z0-9]/leds/lcd-backlight(/.*)?   u:object_r:sysfs_graphics:s0
++/sys/devices/soc.0/[a-z0-9]+.qcom,mdss_mdp/qcom,mdss_fb_primary.[a-z0-9]+/leds/lcd-backlight(/.*)?   u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_mdp/caps           u:object_r:sysfs_graphics:s0
+ /sys/devices/soc/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap             u:object_r:sysfs_graphics:s0
+ /sys/devices(/platform)?/soc/[a-z0-9]+.qcom,mdss_mdp/bw_mode_bitmap             u:object_r:sysfs_graphics:s0
+-- 
+2.19.1
+

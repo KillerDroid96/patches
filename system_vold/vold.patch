@@ -1,0 +1,2153 @@
+From e4ff6837f021f58a605a66727803a01204236481 Mon Sep 17 00:00:00 2001
+From: AnilKumar Chimata <anilc@codeaurora.org>
+Date: Fri, 11 May 2018 00:25:09 +0530
+Subject: [PATCH 1/5] vold: Add Hardware FDE feature
+
+Add HW FDE changes to new tip along with soong rules for
+conditional compilation.
+
+Following changes for HW FDE as well ported:
+- Restart Android framework after HW FDE key has been created
+- Add support of Inline Cryto Engine
+- Use new HW FDE apis to update password
+- vold: Tie HW FDE keys with Root of Trust(ROT)
+- vold: Fix HW FDE OTA support on SW FDE encrypted device
+- vold: Fix return value from get_keymaster_hw_fde_passwd()
+- vold: Remove creation of new keymaster key for password update
+- vold: Fix password update issue with HW FDE
+- vold: hw_fde: fix OTA issues from L to M
+- vold: Branch out SW and HW FDE paths to improve boot up time
+- cryptfs: Use lower case alphabets for hex key during OTA upgrades
+- vold: Improve device boot up time (Tune sleep calls)
+- Retry mount if mount fails after setting HW FDE key
+- cryptfs: Fix compilation error
+- cryptfs: Fix mount failure when encryption triggered from settings
+- cryptfs: fix issue that caused problems with forced HW encryption
+- cryptfs: fix wrong password set by user during bootup.
+
+CRs-Fixed: 2210986
+Change-Id: I77279fc7e309ac94535123a2b2dbcb228bb47251
+---
+ Android.bp                   |   8 +
+ VoldNativeService.cpp        |   4 +-
+ VoldNativeService.h          |   2 +-
+ binder/android/os/IVold.aidl |   2 +-
+ cryptfs.cpp                  | 637 ++++++++++++++++++++++++++++++++---
+ cryptfs.h                    |  10 +-
+ 6 files changed, 614 insertions(+), 49 deletions(-)
+
+diff --git a/Android.bp b/Android.bp
+index 48dfaaf..ffb139e 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -140,6 +140,11 @@ cc_library_static {
+                 "libarcobbvolume",
+             ],
+         },
++        device_support_hwfde: {
++            cflags: ["-DCONFIG_HW_DISK_ENCRYPTION"],
++            header_libs: ["libcryptfs_hw_headers"],
++            shared_libs: ["libcryptfs_hw"],
++        },
+     },
+ }
+ 
+@@ -159,6 +164,9 @@ cc_binary {
+                 "libarcobbvolume",
+             ],
+         },
++        device_support_hwfde: {
++            shared_libs: ["libcryptfs_hw"],
++        },
+     },
+     init_rc: [
+         "vold.rc",
+diff --git a/VoldNativeService.cpp b/VoldNativeService.cpp
+index 81523c6..6d6c6ec 100644
+--- a/VoldNativeService.cpp
++++ b/VoldNativeService.cpp
+@@ -581,11 +581,11 @@ binder::Status VoldNativeService::fdeEnable(int32_t passwordType,
+ }
+ 
+ binder::Status VoldNativeService::fdeChangePassword(int32_t passwordType,
+-        const std::string& password) {
++        const std::string& currentPassword, const std::string& password) {
+     ENFORCE_UID(AID_SYSTEM);
+     ACQUIRE_CRYPT_LOCK;
+ 
+-    return translate(cryptfs_changepw(passwordType, password.c_str()));
++    return translate(cryptfs_changepw(passwordType, currentPassword.c_str(), password.c_str()));
+ }
+ 
+ binder::Status VoldNativeService::fdeVerifyPassword(const std::string& password) {
+diff --git a/VoldNativeService.h b/VoldNativeService.h
+index 2e90101..da8c660 100644
+--- a/VoldNativeService.h
++++ b/VoldNativeService.h
+@@ -82,7 +82,7 @@ public:
+     binder::Status fdeEnable(int32_t passwordType,
+             const std::string& password, int32_t encryptionFlags);
+     binder::Status fdeChangePassword(int32_t passwordType,
+-            const std::string& password);
++            const std::string& currentPassword, const std::string& password);
+     binder::Status fdeVerifyPassword(const std::string& password);
+     binder::Status fdeGetField(const std::string& key, std::string* _aidl_return);
+     binder::Status fdeSetField(const std::string& key, const std::string& value);
+diff --git a/binder/android/os/IVold.aidl b/binder/android/os/IVold.aidl
+index f386889..9f5b21a 100644
+--- a/binder/android/os/IVold.aidl
++++ b/binder/android/os/IVold.aidl
+@@ -65,7 +65,7 @@ interface IVold {
+     void fdeRestart();
+     int fdeComplete();
+     void fdeEnable(int passwordType, @utf8InCpp String password, int encryptionFlags);
+-    void fdeChangePassword(int passwordType, @utf8InCpp String password);
++    void fdeChangePassword(int passwordType, @utf8InCpp String currentPassword, @utf8InCpp String password);
+     void fdeVerifyPassword(@utf8InCpp String password);
+     @utf8InCpp String fdeGetField(@utf8InCpp String key);
+     void fdeSetField(@utf8InCpp String key, @utf8InCpp String value);
+diff --git a/cryptfs.cpp b/cryptfs.cpp
+index c5024ae..ad2fa45 100644
+--- a/cryptfs.cpp
++++ b/cryptfs.cpp
+@@ -63,6 +63,9 @@
+ #include "Keymaster.h"
+ #include "android-base/properties.h"
+ #include <bootloader_message/bootloader_message.h>
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++#include <cryptfs_hw.h>
++#endif
+ extern "C" {
+ #include <crypto_scrypt.h>
+ }
+@@ -84,6 +87,7 @@ static_assert(INTERMEDIATE_BUF_SIZE == SCRYPT_LEN,
+ 
+ #define KEY_IN_FOOTER  "footer"
+ 
++#define DEFAULT_HEX_PASSWORD "64656661756c745f70617373776f7264"
+ #define DEFAULT_PASSWORD "default_password"
+ 
+ #define CRYPTO_BLOCK_DEVICE "userdata"
+@@ -99,6 +103,7 @@ static_assert(INTERMEDIATE_BUF_SIZE == SCRYPT_LEN,
+ #define RSA_KEY_SIZE_BYTES (RSA_KEY_SIZE / 8)
+ #define RSA_EXPONENT 0x10001
+ #define KEYMASTER_CRYPTFS_RATE_LIMIT 1  // Maximum one try per second
++#define KEY_LEN_BYTES 16
+ 
+ #define RETRY_MOUNT_ATTEMPTS 10
+ #define RETRY_MOUNT_DELAY_SECONDS 1
+@@ -112,6 +117,151 @@ static char *saved_mount_point;
+ static int  master_key_saved = 0;
+ static struct crypt_persist_data *persist_data = NULL;
+ 
++static int previous_type;
++
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++static int scrypt_keymaster(const char *passwd, const unsigned char *salt,
++                            unsigned char *ikey, void *params);
++static void convert_key_to_hex_ascii(const unsigned char *master_key,
++                                     unsigned int keysize, char *master_key_ascii);
++static int put_crypt_ftr_and_key(struct crypt_mnt_ftr *crypt_ftr);
++static int test_mount_hw_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
++                const char *passwd, const char *mount_point, const char *label);
++int cryptfs_changepw_hw_fde(int crypt_type, const char *currentpw,
++                                   const char *newpw);
++int cryptfs_check_passwd_hw(char *passwd);
++int cryptfs_get_master_key(struct crypt_mnt_ftr* ftr, const char* password,
++                                   unsigned char* master_key);
++
++static void convert_key_to_hex_ascii_for_upgrade(const unsigned char *master_key,
++                                     unsigned int keysize, char *master_key_ascii)
++{
++    unsigned int i, a;
++    unsigned char nibble;
++
++    for (i = 0, a = 0; i < keysize; i++, a += 2) {
++        /* For each byte, write out two ascii hex digits */
++        nibble = (master_key[i] >> 4) & 0xf;
++        master_key_ascii[a] = nibble + (nibble > 9 ? 0x57 : 0x30);
++
++        nibble = master_key[i] & 0xf;
++        master_key_ascii[a + 1] = nibble + (nibble > 9 ? 0x57 : 0x30);
++    }
++
++    /* Add the null termination */
++    master_key_ascii[a] = '\0';
++}
++
++static int get_keymaster_hw_fde_passwd(const char* passwd, unsigned char* newpw,
++                                  unsigned char* salt,
++                                  const struct crypt_mnt_ftr *ftr)
++{
++    /* if newpw updated, return 0
++     * if newpw not updated return -1
++     */
++    int rc = -1;
++
++    if (should_use_keymaster()) {
++        if (scrypt_keymaster(passwd, salt, newpw, (void*)ftr)) {
++            SLOGE("scrypt failed");
++        } else {
++            rc = 0;
++        }
++    }
++
++    return rc;
++}
++
++static int verify_hw_fde_passwd(const char *passwd, struct crypt_mnt_ftr* crypt_ftr)
++{
++    unsigned char newpw[32] = {0};
++    int key_index;
++    if (get_keymaster_hw_fde_passwd(passwd, newpw, crypt_ftr->salt, crypt_ftr))
++        key_index = set_hw_device_encryption_key(passwd,
++                                           (char*) crypt_ftr->crypto_type_name);
++    else
++        key_index = set_hw_device_encryption_key((const char*)newpw,
++                                           (char*) crypt_ftr->crypto_type_name);
++    return key_index;
++}
++
++static int verify_and_update_hw_fde_passwd(const char *passwd,
++                                           struct crypt_mnt_ftr* crypt_ftr)
++{
++    char* new_passwd = NULL;
++    unsigned char newpw[32] = {0};
++    int key_index = -1;
++    int passwd_updated = -1;
++    int ascii_passwd_updated = (crypt_ftr->flags & CRYPT_ASCII_PASSWORD_UPDATED);
++
++    key_index = verify_hw_fde_passwd(passwd, crypt_ftr);
++    if (key_index < 0) {
++        ++crypt_ftr->failed_decrypt_count;
++
++        if (ascii_passwd_updated) {
++            SLOGI("Ascii password was updated");
++        } else {
++            /* Code in else part would execute only once:
++             * When device is upgraded from L->M release.
++             * Once upgraded, code flow should never come here.
++             * L release passed actual password in hex, so try with hex
++             * Each nible of passwd was encoded as a byte, so allocate memory
++             * twice of password len plus one more byte for null termination
++             */
++            if (crypt_ftr->crypt_type == CRYPT_TYPE_DEFAULT) {
++                new_passwd = (char*)malloc(strlen(DEFAULT_HEX_PASSWORD) + 1);
++                if (new_passwd == NULL) {
++                    SLOGE("System out of memory. Password verification  incomplete");
++                    goto out;
++                }
++                strlcpy(new_passwd, DEFAULT_HEX_PASSWORD, strlen(DEFAULT_HEX_PASSWORD) + 1);
++            } else {
++                new_passwd = (char*)malloc(strlen(passwd) * 2 + 1);
++                if (new_passwd == NULL) {
++                    SLOGE("System out of memory. Password verification  incomplete");
++                    goto out;
++                }
++                convert_key_to_hex_ascii_for_upgrade((const unsigned char*)passwd,
++                                       strlen(passwd), new_passwd);
++            }
++            key_index = set_hw_device_encryption_key((const char*)new_passwd,
++                                       (char*) crypt_ftr->crypto_type_name);
++            if (key_index >=0) {
++                crypt_ftr->failed_decrypt_count = 0;
++                SLOGI("Hex password verified...will try to update with Ascii value");
++                /* Before updating password, tie that with keymaster to tie with ROT */
++
++                if (get_keymaster_hw_fde_passwd(passwd, newpw,
++                                                crypt_ftr->salt, crypt_ftr)) {
++                    passwd_updated = update_hw_device_encryption_key(new_passwd,
++                                     passwd, (char*)crypt_ftr->crypto_type_name);
++                } else {
++                    passwd_updated = update_hw_device_encryption_key(new_passwd,
++                                     (const char*)newpw, (char*)crypt_ftr->crypto_type_name);
++                }
++
++                if (passwd_updated >= 0) {
++                    crypt_ftr->flags |= CRYPT_ASCII_PASSWORD_UPDATED;
++                    SLOGI("Ascii password recorded and updated");
++                } else {
++                    SLOGI("Passwd verified, could not update...Will try next time");
++                }
++            } else {
++                ++crypt_ftr->failed_decrypt_count;
++            }
++            free(new_passwd);
++        }
++    } else {
++        if (!ascii_passwd_updated)
++            crypt_ftr->flags |= CRYPT_ASCII_PASSWORD_UPDATED;
++    }
++out:
++    // update footer before leaving
++    put_crypt_ftr_and_key(crypt_ftr);
++    return key_index;
++}
++#endif
++
+ /* Should we use keymaster? */
+ static int keymaster_check_compatibility()
+ {
+@@ -1000,16 +1150,36 @@ static int load_crypto_mapping_table(struct crypt_mnt_ftr *crypt_ftr,
+   tgt->status = 0;
+   tgt->sector_start = 0;
+   tgt->length = crypt_ftr->fs_size;
+-  strlcpy(tgt->target_type, "crypt", DM_MAX_TYPE_NAME);
+-
+   crypt_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
+-  convert_key_to_hex_ascii(master_key, crypt_ftr->keysize, master_key_ascii);
+-
+   buff_offset = crypt_params - buffer;
+   SLOGI("Extra parameters for dm_crypt: %s\n", extra_params);
++
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++  if(is_hw_disk_encryption((char*)crypt_ftr->crypto_type_name)) {
++    strlcpy(tgt->target_type, "req-crypt",DM_MAX_TYPE_NAME);
++    if (is_ice_enabled())
++      convert_key_to_hex_ascii(master_key, sizeof(int), master_key_ascii);
++    else
++      convert_key_to_hex_ascii(master_key, crypt_ftr->keysize, master_key_ascii);
++  }
++  else {
++    convert_key_to_hex_ascii(master_key, crypt_ftr->keysize, master_key_ascii);
++    strlcpy(tgt->target_type, "crypt", DM_MAX_TYPE_NAME);
++  }
++  snprintf(crypt_params, sizeof(buffer) - buff_offset, "%s %s 0 %s 0 %s 0",
++           crypt_ftr->crypto_type_name, master_key_ascii,
++           real_blk_name, extra_params);
++
++  SLOGI("target_type = %s", tgt->target_type);
++  SLOGI("real_blk_name = %s, extra_params = %s", real_blk_name, extra_params);
++#else
++  convert_key_to_hex_ascii(master_key, crypt_ftr->keysize, master_key_ascii);
++  strlcpy(tgt->target_type, "crypt", DM_MAX_TYPE_NAME);
+   snprintf(crypt_params, sizeof(buffer) - buff_offset, "%s %s 0 %s 0 %s",
+            crypt_ftr->crypto_type_name, master_key_ascii, real_blk_name,
+            extra_params);
++#endif
++
+   crypt_params += strlen(crypt_params) + 1;
+   crypt_params = (char *) (((unsigned long)crypt_params + 7) & ~8); /* Align to an 8 byte boundary */
+   tgt->next = crypt_params - buffer;
+@@ -1029,7 +1199,6 @@ static int load_crypto_mapping_table(struct crypt_mnt_ftr *crypt_ftr,
+   }
+ }
+ 
+-
+ static int get_dm_crypt_version(int fd, const char *name,  int *version)
+ {
+     char buffer[DM_CRYPT_BUF_SIZE];
+@@ -1049,7 +1218,11 @@ static int get_dm_crypt_version(int fd, const char *name,  int *version)
+      */
+     v = (struct dm_target_versions *) &buffer[sizeof(struct dm_ioctl)];
+     while (v->next) {
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++        if (! strcmp(v->name, "crypt") || ! strcmp(v->name, "req-crypt")) {
++#else
+         if (! strcmp(v->name, "crypt")) {
++#endif
+             /* We found the crypt driver, return the version, and get out */
+             version[0] = v->version[0];
+             version[1] = v->version[1];
+@@ -1062,6 +1235,7 @@ static int get_dm_crypt_version(int fd, const char *name,  int *version)
+     return -1;
+ }
+ 
++#ifndef CONFIG_HW_DISK_ENCRYPTION
+ static std::string extra_params_as_string(const std::vector<std::string>& extra_params_vec) {
+     if (extra_params_vec.empty()) return "";
+     std::string extra_params = std::to_string(extra_params_vec.size());
+@@ -1071,6 +1245,7 @@ static std::string extra_params_as_string(const std::vector<std::string>& extra_
+     }
+     return extra_params;
+ }
++#endif
+ 
+ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned char* master_key,
+                                  const char* real_blk_name, char* crypto_blk_name, const char* name,
+@@ -1083,7 +1258,13 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+     int retval = -1;
+     int version[3];
+     int load_count;
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    char encrypted_state[PROPERTY_VALUE_MAX] = {0};
++    char progress[PROPERTY_VALUE_MAX] = {0};
++    const char *extra_params;
++#else
+     std::vector<std::string> extra_params_vec;
++#endif
+ 
+     if ((fd = open("/dev/device-mapper", O_RDWR | O_CLOEXEC)) < 0) {
+         SLOGE("Cannot open device-mapper\n");
+@@ -1108,6 +1289,45 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+     minor = (io->dev & 0xff) | ((io->dev >> 12) & 0xfff00);
+     snprintf(crypto_blk_name, MAXPATHLEN, "/dev/block/dm-%u", minor);
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    if(is_hw_disk_encryption((char*)crypt_ftr->crypto_type_name)) {
++      /* Set fde_enabled if either FDE completed or in-progress */
++      property_get("ro.crypto.state", encrypted_state, ""); /* FDE completed */
++      property_get("vold.encrypt_progress", progress, ""); /* FDE in progress */
++      if (!strcmp(encrypted_state, "encrypted") || strcmp(progress, "")) {
++        if (is_ice_enabled()) {
++          if (flags & CREATE_CRYPTO_BLK_DEV_FLAGS_ALLOW_ENCRYPT_OVERRIDE)
++            extra_params = "fde_enabled ice allow_encrypt_override";
++          else
++            extra_params = "fde_enabled ice";
++        } else {
++          if (flags & CREATE_CRYPTO_BLK_DEV_FLAGS_ALLOW_ENCRYPT_OVERRIDE)
++            extra_params = "fde_enabled allow_encrypt_override";
++          else
++            extra_params = "fde_enabled";
++        }
++      } else {
++          if (flags & CREATE_CRYPTO_BLK_DEV_FLAGS_ALLOW_ENCRYPT_OVERRIDE)
++            extra_params = "fde_enabled allow_encrypt_override";
++          else
++            extra_params = "fde_enabled";
++      }
++    } else {
++      extra_params = "";
++      if (! get_dm_crypt_version(fd, name, version)) {
++        /* Support for allow_discards was added in version 1.11.0 */
++        if ((version[0] >= 2) || ((version[0] == 1) && (version[1] >= 11))) {
++          if (flags & CREATE_CRYPTO_BLK_DEV_FLAGS_ALLOW_ENCRYPT_OVERRIDE)
++            extra_params = "2 allow_discards allow_encrypt_override";
++          else
++            extra_params = "1 allow_discards";
++          SLOGI("Enabling support for allow_discards in dmcrypt.\n");
++        }
++      }
++    }
++    load_count = load_crypto_mapping_table(crypt_ftr, master_key, real_blk_name, name, fd,
++                                           extra_params);
++#else
+     if (!get_dm_crypt_version(fd, name, version)) {
+         /* Support for allow_discards was added in version 1.11.0 */
+         if ((version[0] >= 2) || ((version[0] == 1) && (version[1] >= 11))) {
+@@ -1119,6 +1339,7 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+     }
+     load_count = load_crypto_mapping_table(crypt_ftr, master_key, real_blk_name, name, fd,
+                                            extra_params_as_string(extra_params_vec).c_str());
++#endif
+     if (load_count < 0) {
+         SLOGE("Cannot load dm-crypt mapping table.\n");
+         goto errout;
+@@ -1247,7 +1468,8 @@ static int scrypt_keymaster(const char *passwd, const unsigned char *salt,
+ static int encrypt_master_key(const char *passwd, const unsigned char *salt,
+                               const unsigned char *decrypted_master_key,
+                               unsigned char *encrypted_master_key,
+-                              struct crypt_mnt_ftr *crypt_ftr)
++                              struct crypt_mnt_ftr *crypt_ftr,
++                              bool create_keymaster_key)
+ {
+     unsigned char ikey[INTERMEDIATE_BUF_SIZE] = { 0 };
+     EVP_CIPHER_CTX e_ctx;
+@@ -1259,7 +1481,7 @@ static int encrypt_master_key(const char *passwd, const unsigned char *salt,
+ 
+     switch (crypt_ftr->kdf_type) {
+     case KDF_SCRYPT_KEYMASTER:
+-        if (keymaster_create_key(crypt_ftr)) {
++        if (create_keymaster_key && keymaster_create_key(crypt_ftr)) {
+             SLOGE("keymaster_create_key failed");
+             return -1;
+         }
+@@ -1429,13 +1651,13 @@ static int create_encrypted_random_key(const char *passwd, unsigned char *master
+     close(fd);
+ 
+     /* Now encrypt it with the password */
+-    return encrypt_master_key(passwd, salt, key_buf, master_key, crypt_ftr);
++    return encrypt_master_key(passwd, salt, key_buf, master_key, crypt_ftr, true);
+ }
+ 
+ int wait_and_unmount(const char *mountpoint, bool kill)
+ {
+     int i, err, rc;
+-#define WAIT_UNMOUNT_COUNT 20
++#define WAIT_UNMOUNT_COUNT 200
+ 
+     /*  Now umount the tmpfs filesystem */
+     for (i=0; i<WAIT_UNMOUNT_COUNT; i++) {
+@@ -1452,18 +1674,18 @@ int wait_and_unmount(const char *mountpoint, bool kill)
+ 
+         err = errno;
+ 
+-        /* If allowed, be increasingly aggressive before the last two retries */
++        /* If allowed, be increasingly aggressive before the last 2 seconds */
+         if (kill) {
+-            if (i == (WAIT_UNMOUNT_COUNT - 3)) {
++            if (i == (WAIT_UNMOUNT_COUNT - 30)) {
+                 SLOGW("sending SIGHUP to processes with open files\n");
+                 android::vold::KillProcessesWithOpenFiles(mountpoint, SIGTERM);
+-            } else if (i == (WAIT_UNMOUNT_COUNT - 2)) {
++            } else if (i == (WAIT_UNMOUNT_COUNT - 20)) {
+                 SLOGW("sending SIGKILL to processes with open files\n");
+                 android::vold::KillProcessesWithOpenFiles(mountpoint, SIGKILL);
+             }
+         }
+ 
+-        sleep(1);
++        usleep(100000);
+     }
+ 
+     if (i < WAIT_UNMOUNT_COUNT) {
+@@ -1630,6 +1852,17 @@ static int cryptfs_restart_internal(int restart_main)
+                     cryptfs_reboot(RebootType::reboot);
+                 }
+             } else {
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++                if (--retries) {
++                    sleep(RETRY_MOUNT_DELAY_SECONDS);
++                } else {
++                    SLOGE("Failed to mount decrypted data");
++                    cryptfs_set_corrupt();
++                    cryptfs_trigger_restart_min_framework();
++                    SLOGI("Started framework to offer wipe");
++                    return -1;
++                }
++#else
+                 SLOGE("Failed to mount decrypted data");
+                 cryptfs_set_corrupt();
+                 cryptfs_trigger_restart_min_framework();
+@@ -1638,6 +1871,7 @@ static int cryptfs_restart_internal(int restart_main)
+                     SLOGE("Failed to setexeccon");
+                 }
+                 return -1;
++#endif
+             }
+         }
+         if (setexeccon(NULL)) {
+@@ -1732,6 +1966,66 @@ static int do_crypto_complete(const char *mount_point)
+   return CRYPTO_COMPLETE_ENCRYPTED;
+ }
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++static int test_mount_hw_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
++             const char *passwd, const char *mount_point, const char *label)
++{
++  /* Allocate enough space for a 256 bit key, but we may use less */
++  unsigned char decrypted_master_key[32];
++  char crypto_blkdev[MAXPATHLEN];
++  char real_blkdev[MAXPATHLEN];
++  unsigned int orig_failed_decrypt_count;
++  int rc = 0;
++
++  SLOGD("crypt_ftr->fs_size = %lld\n", crypt_ftr->fs_size);
++  orig_failed_decrypt_count = crypt_ftr->failed_decrypt_count;
++
++  fs_mgr_get_crypt_info(fstab_default, 0, real_blkdev, sizeof(real_blkdev));
++
++  int key_index = 0;
++  if(is_hw_disk_encryption((char*)crypt_ftr->crypto_type_name)) {
++    key_index = verify_and_update_hw_fde_passwd(passwd, crypt_ftr);
++    if (key_index < 0) {
++      rc = crypt_ftr->failed_decrypt_count;
++      goto errout;
++    }
++    else {
++      if (is_ice_enabled()) {
++        if (create_crypto_blk_dev(crypt_ftr, (unsigned char*)&key_index,
++                            real_blkdev, crypto_blkdev, label, 0)) {
++          SLOGE("Error creating decrypted block device");
++          rc = -1;
++          goto errout;
++        }
++      } else {
++        if (create_crypto_blk_dev(crypt_ftr, decrypted_master_key,
++                            real_blkdev, crypto_blkdev, label, 0)) {
++          SLOGE("Error creating decrypted block device");
++          rc = -1;
++          goto errout;
++        }
++      }
++    }
++  }
++
++  if (rc == 0) {
++    crypt_ftr->failed_decrypt_count = 0;
++    if (orig_failed_decrypt_count != 0) {
++      put_crypt_ftr_and_key(crypt_ftr);
++    }
++
++    /* Save the name of the crypto block device
++     * so we can mount it when restarting the framework. */
++    property_set("ro.crypto.fs_crypto_blkdev", crypto_blkdev);
++    master_key_saved = 1;
++  }
++
++ errout:
++  return rc;
++}
++#endif
++
++
+ static int test_mount_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
+                                    const char *passwd, const char *mount_point, const char *label)
+ {
+@@ -1838,7 +2132,7 @@ static int test_mount_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
+ 
+     if (upgrade) {
+         rc = encrypt_master_key(passwd, crypt_ftr->salt, saved_master_key,
+-                                crypt_ftr->master_key, crypt_ftr);
++                                crypt_ftr->master_key, crypt_ftr, true);
+         if (!rc) {
+             rc = put_crypt_ftr_and_key(crypt_ftr);
+         }
+@@ -1935,6 +2229,66 @@ int check_unmounted_and_get_ftr(struct crypt_mnt_ftr* crypt_ftr)
+     return 0;
+ }
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++int cryptfs_check_passwd_hw(const char* passwd)
++{
++    struct crypt_mnt_ftr crypt_ftr;
++    int rc;
++    unsigned char master_key[KEY_LEN_BYTES];
++
++    /* get key */
++    if (get_crypt_ftr_and_key(&crypt_ftr)) {
++        SLOGE("Error getting crypt footer and key");
++        return -1;
++    }
++
++    /*
++     * in case of manual encryption (from GUI), the encryption is done with
++     * default password
++     */
++    if (crypt_ftr.flags & CRYPT_FORCE_COMPLETE) {
++        /* compare scrypted_intermediate_key with stored scrypted_intermediate_key
++         * which was created with actual password before reboot.
++         */
++        rc = cryptfs_get_master_key(&crypt_ftr, passwd, master_key);
++        if (rc) {
++            SLOGE("password doesn't match");
++            rc = ++crypt_ftr.failed_decrypt_count;
++            put_crypt_ftr_and_key(&crypt_ftr);
++            return rc;
++        }
++
++        rc = test_mount_hw_encrypted_fs(&crypt_ftr, DEFAULT_PASSWORD,
++            DATA_MNT_POINT, CRYPTO_BLOCK_DEVICE);
++
++        if (rc) {
++            SLOGE("Default password did not match on reboot encryption");
++            return rc;
++        }
++
++        crypt_ftr.flags &= ~CRYPT_FORCE_COMPLETE;
++        put_crypt_ftr_and_key(&crypt_ftr);
++        rc = cryptfs_changepw(crypt_ftr.crypt_type, DEFAULT_PASSWORD, passwd);
++        if (rc) {
++            SLOGE("Could not change password on reboot encryption");
++            return rc;
++        }
++    } else
++        rc = test_mount_hw_encrypted_fs(&crypt_ftr, passwd,
++            DATA_MNT_POINT, CRYPTO_BLOCK_DEVICE);
++
++    if (crypt_ftr.crypt_type != CRYPT_TYPE_DEFAULT) {
++        cryptfs_clear_password();
++        password = strdup(passwd);
++        struct timespec now;
++        clock_gettime(CLOCK_BOOTTIME, &now);
++        password_expiry_time = now.tv_sec + password_max_age_seconds;
++    }
++
++    return rc;
++}
++#endif
++
+ int cryptfs_check_passwd(const char *passwd)
+ {
+     SLOGI("cryptfs_check_passwd");
+@@ -1952,8 +2306,14 @@ int cryptfs_check_passwd(const char *passwd)
+         return rc;
+     }
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    if (is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name))
++        return cryptfs_check_passwd_hw(passwd);
++#endif
++
+     rc = test_mount_encrypted_fs(&crypt_ftr, passwd,
+                                  DATA_MNT_POINT, CRYPTO_BLOCK_DEVICE);
++
+     if (rc) {
+         SLOGE("Password did not match");
+         return rc;
+@@ -1974,7 +2334,7 @@ int cryptfs_check_passwd(const char *passwd)
+ 
+         crypt_ftr.flags &= ~CRYPT_FORCE_COMPLETE;
+         put_crypt_ftr_and_key(&crypt_ftr);
+-        rc = cryptfs_changepw(crypt_ftr.crypt_type, passwd);
++        rc = cryptfs_changepw(crypt_ftr.crypt_type, DEFAULT_PASSWORD, passwd);
+         if (rc) {
+             SLOGE("Could not change password on reboot encryption");
+             return rc;
+@@ -2024,6 +2384,24 @@ int cryptfs_verify_passwd(const char *passwd)
+         /* If the device has no password, then just say the password is valid */
+         rc = 0;
+     } else {
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++        if(is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name)) {
++            if (verify_hw_fde_passwd(passwd, &crypt_ftr) >= 0)
++              rc = 0;
++            else
++              rc = -1;
++        } else {
++            decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
++            if (!memcmp(decrypted_master_key, saved_master_key, crypt_ftr.keysize)) {
++                /* They match, the password is correct */
++                rc = 0;
++            } else {
++              /* If incorrect, sleep for a bit to prevent dictionary attacks */
++                sleep(1);
++                rc = 1;
++            }
++        }
++#else
+         decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
+         if (!memcmp(decrypted_master_key, saved_master_key, crypt_ftr.keysize)) {
+             /* They match, the password is correct */
+@@ -2033,6 +2411,7 @@ int cryptfs_verify_passwd(const char *passwd)
+             sleep(1);
+             rc = 1;
+         }
++#endif
+     }
+ 
+     return rc;
+@@ -2156,6 +2535,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+     off64_t previously_encrypted_upto = 0;
+     bool rebootEncryption = false;
+     bool onlyCreateHeader = false;
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    unsigned char newpw[32];
++    int key_index = 0;
++#endif
++    int index = 0;
++
+     int fd = -1;
+ 
+     if (get_crypt_ftr_and_key(&crypt_ftr) == 0) {
+@@ -2260,30 +2645,6 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+         fclose(breadcrumb);
+     }
+ 
+-    /* Do extra work for a better UX when doing the long inplace encryption */
+-    if (!onlyCreateHeader) {
+-        /* Now that /data is unmounted, we need to mount a tmpfs
+-         * /data, set a property saying we're doing inplace encryption,
+-         * and restart the framework.
+-         */
+-        if (fs_mgr_do_tmpfs_mount(DATA_MNT_POINT)) {
+-            goto error_shutting_down;
+-        }
+-        /* Tells the framework that inplace encryption is starting */
+-        property_set("vold.encrypt_progress", "0");
+-
+-        /* restart the framework. */
+-        /* Create necessary paths on /data */
+-        prep_data_fs();
+-
+-        /* Ugh, shutting down the framework is not synchronous, so until it
+-         * can be fixed, this horrible hack will wait a moment for it all to
+-         * shut down before proceeding.  Without it, some devices cannot
+-         * restart the graphics services.
+-         */
+-        sleep(2);
+-    }
+-
+     /* Start the actual work of making an encrypted filesystem */
+     /* Initialize a crypt_mnt_ftr for the partition */
+     if (previously_encrypted_upto == 0 && !rebootEncryption) {
+@@ -2307,7 +2668,11 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+             crypt_ftr.flags |= CRYPT_INCONSISTENT_STATE;
+         }
+         crypt_ftr.crypt_type = crypt_type;
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++        strlcpy((char *)crypt_ftr.crypto_type_name, "aes-xts", MAX_CRYPTO_TYPE_NAME_LEN);
++#else
+         strlcpy((char *)crypt_ftr.crypto_type_name, cryptfs_get_crypto_name(), MAX_CRYPTO_TYPE_NAME_LEN);
++#endif
+ 
+         /* Make an encrypted master key */
+         if (create_encrypted_random_key(onlyCreateHeader ? DEFAULT_PASSWORD : passwd,
+@@ -2322,7 +2687,7 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+             unsigned char encrypted_fake_master_key[MAX_KEY_LEN];
+             memset(fake_master_key, 0, sizeof(fake_master_key));
+             encrypt_master_key(passwd, crypt_ftr.salt, fake_master_key,
+-                               encrypted_fake_master_key, &crypt_ftr);
++                               encrypted_fake_master_key, &crypt_ftr, true);
+         }
+ 
+         /* Write the key to the end of the partition */
+@@ -2343,12 +2708,57 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+         }
+     }
+ 
++    /* When encryption triggered from settings, encryption starts after reboot.
++       So set the encryption key when the actual encryption starts.
++     */
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    if (previously_encrypted_upto == 0) {
++        if (!rebootEncryption)
++            clear_hw_device_encryption_key();
++
++        if (get_keymaster_hw_fde_passwd(
++                         onlyCreateHeader ? DEFAULT_PASSWORD : passwd,
++                         newpw, crypt_ftr.salt, &crypt_ftr))
++            key_index = set_hw_device_encryption_key(
++                         onlyCreateHeader ? DEFAULT_PASSWORD : passwd,
++                         (char*)crypt_ftr.crypto_type_name);
++        else
++            key_index = set_hw_device_encryption_key((const char*)newpw,
++                                (char*) crypt_ftr.crypto_type_name);
++        if (key_index < 0)
++            goto error_shutting_down;
++
++        crypt_ftr.flags |= CRYPT_ASCII_PASSWORD_UPDATED;
++        put_crypt_ftr_and_key(&crypt_ftr);
++    }
++#endif
++
+     if (onlyCreateHeader) {
+         sleep(2);
+         cryptfs_reboot(RebootType::reboot);
+-    }
++    } else {
++        /* Do extra work for a better UX when doing the long inplace encryption */
++        /* Now that /data is unmounted, we need to mount a tmpfs
++         * /data, set a property saying we're doing inplace encryption,
++         * and restart the framework.
++         */
++        if (fs_mgr_do_tmpfs_mount(DATA_MNT_POINT)) {
++            goto error_shutting_down;
++        }
++        /* Tells the framework that inplace encryption is starting */
++        property_set("vold.encrypt_progress", "0");
++
++        /* restart the framework. */
++        /* Create necessary paths on /data */
++        prep_data_fs();
++
++        /* Ugh, shutting down the framework is not synchronous, so until it
++         * can be fixed, this horrible hack will wait a moment for it all to
++         * shut down before proceeding.  Without it, some devices cannot
++         * restart the graphics services.
++         */
++        sleep(2);
+ 
+-    if (!no_ui || rebootEncryption) {
+         /* startup service classes main and late_start */
+         property_set("vold.decrypt", "trigger_restart_min_framework");
+         SLOGD("Just triggered restart_min_framework\n");
+@@ -2361,8 +2771,17 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+     }
+ 
+     decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    if (is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name) && is_ice_enabled())
++      create_crypto_blk_dev(&crypt_ftr, (unsigned char*)&key_index, real_blkdev, crypto_blkdev,
++                          CRYPTO_BLOCK_DEVICE, 0);
++    else
++      create_crypto_blk_dev(&crypt_ftr, decrypted_master_key, real_blkdev, crypto_blkdev,
++                          CRYPTO_BLOCK_DEVICE, 0);
++#else
+     create_crypto_blk_dev(&crypt_ftr, decrypted_master_key, real_blkdev, crypto_blkdev,
+                           CRYPTO_BLOCK_DEVICE, 0);
++#endif
+ 
+     /* If we are continuing, check checksums match */
+     rc = 0;
+@@ -2496,7 +2915,7 @@ int cryptfs_enable_default(int no_ui) {
+     return cryptfs_enable_internal(CRYPT_TYPE_DEFAULT, DEFAULT_PASSWORD, no_ui);
+ }
+ 
+-int cryptfs_changepw(int crypt_type, const char *newpw)
++int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
+ {
+     if (e4crypt_is_native()) {
+         SLOGE("cryptfs_changepw not valid for file encryption");
+@@ -2523,6 +2942,28 @@ int cryptfs_changepw(int crypt_type, const char *newpw)
+         return -1;
+     }
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    if(is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name))
++        return  cryptfs_changepw_hw_fde(crypt_type, currentpw, newpw);
++    else {
++        crypt_ftr.crypt_type = crypt_type;
++
++        rc = encrypt_master_key(crypt_type == CRYPT_TYPE_DEFAULT ?
++                                     DEFAULT_PASSWORD : newpw,
++                                     crypt_ftr.salt,
++                                     saved_master_key,
++                                     crypt_ftr.master_key,
++                                     &crypt_ftr, false);
++        if (rc) {
++            SLOGE("Encrypt master key failed: %d", rc);
++            return -1;
++        }
++        /* save the key */
++        put_crypt_ftr_and_key(&crypt_ftr);
++
++        return 0;
++    }
++#else
+     crypt_ftr.crypt_type = crypt_type;
+ 
+     rc = encrypt_master_key(crypt_type == CRYPT_TYPE_DEFAULT ? DEFAULT_PASSWORD
+@@ -2530,7 +2971,7 @@ int cryptfs_changepw(int crypt_type, const char *newpw)
+                        crypt_ftr.salt,
+                        saved_master_key,
+                        crypt_ftr.master_key,
+-                       &crypt_ftr);
++                       &crypt_ftr, false);
+     if (rc) {
+         SLOGE("Encrypt master key failed: %d", rc);
+         return -1;
+@@ -2538,8 +2979,57 @@ int cryptfs_changepw(int crypt_type, const char *newpw)
+     /* save the key */
+     put_crypt_ftr_and_key(&crypt_ftr);
+ 
++    return 0;
++#endif
++}
++
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++int cryptfs_changepw_hw_fde(int crypt_type, const char *currentpw, const char *newpw)
++{
++    struct crypt_mnt_ftr crypt_ftr;
++    int rc;
++    int previous_type;
++
++    /* get key */
++    if (get_crypt_ftr_and_key(&crypt_ftr)) {
++        SLOGE("Error getting crypt footer and key");
++        return -1;
++    }
++
++    previous_type = crypt_ftr.crypt_type;
++    int rc1;
++    unsigned char tmp_curpw[32] = {0};
++    rc1 = get_keymaster_hw_fde_passwd(crypt_ftr.crypt_type == CRYPT_TYPE_DEFAULT ?
++                                      DEFAULT_PASSWORD : currentpw, tmp_curpw,
++                                      crypt_ftr.salt, &crypt_ftr);
++
++    crypt_ftr.crypt_type = crypt_type;
++
++    int ret, rc2;
++    unsigned char tmp_newpw[32] = {0};
++
++    rc2 = get_keymaster_hw_fde_passwd(crypt_type == CRYPT_TYPE_DEFAULT ?
++                                DEFAULT_PASSWORD : newpw , tmp_newpw,
++                                crypt_ftr.salt, &crypt_ftr);
++
++    if (is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name)) {
++        ret = update_hw_device_encryption_key(
++                rc1 ? (previous_type == CRYPT_TYPE_DEFAULT ? DEFAULT_PASSWORD : currentpw) : (const char*)tmp_curpw,
++                rc2 ? (crypt_type == CRYPT_TYPE_DEFAULT ? DEFAULT_PASSWORD : newpw): (const char*)tmp_newpw,
++                                    (char*)crypt_ftr.crypto_type_name);
++        if (ret) {
++            SLOGE("Error updating device encryption hardware key ret %d", ret);
++            return -1;
++        } else {
++            SLOGI("Encryption hardware key updated");
++        }
++    }
++
++    /* save the key */
++    put_crypt_ftr_and_key(&crypt_ftr);
+     return 0;
+ }
++#endif
+ 
+ static unsigned int persist_get_max_entries(int encrypted) {
+     struct crypt_mnt_ftr crypt_ftr;
+@@ -2941,3 +3431,62 @@ int cryptfs_isConvertibleToFBE()
+     struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab_default, DATA_MNT_POINT);
+     return fs_mgr_is_convertible_to_fbe(rec) ? 1 : 0;
+ }
++
++int cryptfs_create_default_ftr(struct crypt_mnt_ftr* crypt_ftr, __attribute__((unused))int key_length)
++{
++    if (cryptfs_init_crypt_mnt_ftr(crypt_ftr)) {
++        SLOGE("Failed to initialize crypt_ftr");
++        return -1;
++    }
++
++    if (create_encrypted_random_key(DEFAULT_PASSWORD, crypt_ftr->master_key,
++                                    crypt_ftr->salt, crypt_ftr)) {
++        SLOGE("Cannot create encrypted master key\n");
++        return -1;
++    }
++
++    //crypt_ftr->keysize = key_length / 8;
++    return 0;
++}
++
++int cryptfs_get_master_key(struct crypt_mnt_ftr* ftr, const char* password,
++                           unsigned char* master_key)
++{
++    int rc;
++
++    unsigned char* intermediate_key = 0;
++    size_t intermediate_key_size = 0;
++
++    if (password == 0 || *password == 0) {
++        password = DEFAULT_PASSWORD;
++    }
++
++    rc = decrypt_master_key(password, master_key, ftr, &intermediate_key,
++                            &intermediate_key_size);
++
++    if (rc) {
++        SLOGE("Can't calculate intermediate key");
++        return rc;
++    }
++
++    int N = 1 << ftr->N_factor;
++    int r = 1 << ftr->r_factor;
++    int p = 1 << ftr->p_factor;
++
++    unsigned char scrypted_intermediate_key[sizeof(ftr->scrypted_intermediate_key)];
++
++    rc = crypto_scrypt(intermediate_key, intermediate_key_size,
++                       ftr->salt, sizeof(ftr->salt), N, r, p,
++                       scrypted_intermediate_key,
++                       sizeof(scrypted_intermediate_key));
++
++    free(intermediate_key);
++
++    if (rc) {
++        SLOGE("Can't scrypt intermediate key");
++        return rc;
++    }
++
++    return memcmp(scrypted_intermediate_key, ftr->scrypted_intermediate_key,
++                  intermediate_key_size);
++}
+diff --git a/cryptfs.h b/cryptfs.h
+index d6c7dc5..d8923db 100644
+--- a/cryptfs.h
++++ b/cryptfs.h
+@@ -66,6 +66,14 @@
+                                      complete. On next cryptkeeper entry, match
+                                      the password. If it matches fix the master
+                                      key and remove this flag. */
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++/* This flag is used to transition from L->M upgrade. L release passed
++ * a byte for every nible of user password while M release is passing
++ * ascii value of user password.
++ * Random flag value is chosen so that it does not conflict with other use cases
++ */
++#define CRYPT_ASCII_PASSWORD_UPDATED 0x1000
++#endif
+ 
+ /* Allowed values for type in the structure below */
+ #define CRYPT_TYPE_PASSWORD 0 /* master_key is encrypted with a password
+@@ -233,7 +241,7 @@ int cryptfs_check_passwd(const char* pw);
+ int cryptfs_verify_passwd(const char* pw);
+ int cryptfs_restart(void);
+ int cryptfs_enable(int type, const char* passwd, int no_ui);
+-int cryptfs_changepw(int type, const char* newpw);
++int cryptfs_changepw(int type, const char *currentpw, const char* newpw);
+ int cryptfs_enable_default(int no_ui);
+ int cryptfs_setup_ext_volume(const char* label, const char* real_blkdev, const unsigned char* key,
+                              char* out_crypto_blkdev);
+-- 
+2.19.1
+
+
+From 1471e73845be0dfb982668670bca6d3a778bd9d7 Mon Sep 17 00:00:00 2001
+From: AnilKumar Chimata <anilc@codeaurora.org>
+Date: Sun, 11 Feb 2018 17:11:24 +0530
+Subject: [PATCH 2/5] system: vold: Remove crypto block device creation
+
+Crypto block device is not required for ICE based
+HW FDE solution. This introduces additional delay
+and is redundant since data is encrypted inline.
+
+CRs-Fixed: 2210986
+Change-Id: I67c044c35e92d2aa9413bc3448b6193f6b6a01d7
+---
+ Android.bp         |  3 ++
+ EncryptInplace.cpp | 77 ++++++++++++++++++++++++++++++++++++++++++++++
+ VoldUtil.h         |  3 ++
+ cryptfs.cpp        | 67 ++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 150 insertions(+)
+
+diff --git a/Android.bp b/Android.bp
+index ffb139e..416b493 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -145,6 +145,9 @@ cc_library_static {
+             header_libs: ["libcryptfs_hw_headers"],
+             shared_libs: ["libcryptfs_hw"],
+         },
++        device_support_hwfde_perf: {
++            cflags: ["-DCONFIG_HW_DISK_ENCRYPT_PERF"],
++        },
+     },
+ }
+ 
+diff --git a/EncryptInplace.cpp b/EncryptInplace.cpp
+index 6462dbf..d46d23e 100644
+--- a/EncryptInplace.cpp
++++ b/EncryptInplace.cpp
+@@ -32,6 +32,9 @@
+ #include <android-base/logging.h>
+ #include <android-base/properties.h>
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++#include "cryptfs_hw.h"
++#endif
+ // HORRIBLE HACK, FIXME
+ #include "cryptfs.h"
+ 
+@@ -282,6 +285,27 @@ static int cryptfs_enable_inplace_ext4(char* crypto_blkdev, char* real_blkdev, o
+     }
+ 
+     LOG(DEBUG) << "Opening" << crypto_blkdev;
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (is_ice_enabled())
++        data.cryptofd = data.realfd;
++    else {
++        // Wait until the block device appears.  Re-use the mount retry values since it is reasonable.
++        while ((data.cryptofd = open(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
++            if (--retries) {
++                PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev
++                            << " for ext4 inplace encrypt. err=" << errno
++                            << "(" << strerror(errno) << "), retrying";
++                sleep(RETRY_MOUNT_DELAY_SECONDS);
++            } else {
++                PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev
++                            << " for ext4 inplace encrypt. err=" << errno
++                            << "(" << strerror(errno) << "), retrying";
++                rc = ENABLE_INPLACE_ERR_DEV;
++                goto errout;
++            }
++        }
++    }
++#else
+     // Wait until the block device appears.  Re-use the mount retry values since it is reasonable.
+     while ((data.cryptofd = open(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
+         if (--retries) {
+@@ -295,6 +319,7 @@ static int cryptfs_enable_inplace_ext4(char* crypto_blkdev, char* real_blkdev, o
+             goto errout;
+         }
+     }
++#endif
+ 
+     if (setjmp(setjmp_env)) { // NOLINT
+         LOG(ERROR) << "Reading ext4 extent caused an exception";
+@@ -340,7 +365,12 @@ static int cryptfs_enable_inplace_ext4(char* crypto_blkdev, char* real_blkdev, o
+ 
+ errout:
+     close(data.realfd);
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (!is_ice_enabled())
++       close(data.cryptofd);
++#else
+     close(data.cryptofd);
++#endif
+ 
+     return rc;
+ }
+@@ -416,12 +446,26 @@ static int cryptfs_enable_inplace_f2fs(char* crypto_blkdev, char* real_blkdev, o
+         PLOG(ERROR) << "Error opening real_blkdev " << real_blkdev << " for f2fs inplace encrypt";
+         goto errout;
+     }
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (is_ice_enabled())
++        data.cryptofd = data.realfd;
++    else {
++        if ((data.cryptofd = open64(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
++            PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev
++                        << " for f2fs inplace encrypt. err=" << errno
++                        << "(" << strerror(errno) << "), retrying";
++            rc = ENABLE_INPLACE_ERR_DEV;
++            goto errout;
++        }
++    }
++#else
+     if ( (data.cryptofd = open64(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
+         PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev
+                     << " for f2fs inplace encrypt";
+         rc = ENABLE_INPLACE_ERR_DEV;
+         goto errout;
+     }
++#endif
+ 
+     f2fs_info = generate_f2fs_info(data.realfd);
+     if (!f2fs_info)
+@@ -465,7 +509,12 @@ errout:
+     free(f2fs_info);
+     free(data.buffer);
+     close(data.realfd);
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (!is_ice_enabled())
++        close(data.cryptofd);
++#else
+     close(data.cryptofd);
++#endif
+ 
+     return rc;
+ }
+@@ -486,11 +535,25 @@ static int cryptfs_enable_inplace_full(char* crypto_blkdev, char* real_blkdev, o
+         return ENABLE_INPLACE_ERR_OTHER;
+     }
+ 
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (is_ice_enabled())
++        cryptofd = realfd;
++    else {
++        if ((cryptofd = open(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
++            PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev
++                        << " for inplace encrypt. err=" << errno
++                        << "(" << strerror(errno) << "), retrying";
++            close(realfd);
++            return ENABLE_INPLACE_ERR_DEV;
++        }
++    }
++#else
+     if ( (cryptofd = open(crypto_blkdev, O_WRONLY|O_CLOEXEC)) < 0) {
+         PLOG(ERROR) << "Error opening crypto_blkdev " << crypto_blkdev << " for inplace encrypt";
+         close(realfd);
+         return ENABLE_INPLACE_ERR_DEV;
+     }
++#endif
+ 
+     /* This is pretty much a simple loop of reading 4K, and writing 4K.
+      * The size passed in is the number of 512 byte sectors in the filesystem.
+@@ -511,10 +574,19 @@ static int cryptfs_enable_inplace_full(char* crypto_blkdev, char* real_blkdev, o
+         goto errout;
+     }
+ 
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (!is_ice_enabled()) {
++        if (lseek64(cryptofd, i * CRYPT_SECTOR_SIZE, SEEK_SET) < 0) {
++            PLOG(ERROR) << "Cannot seek to previously encrypted point on " << crypto_blkdev;
++            goto errout;
++        }
++    }
++#else
+     if (lseek64(cryptofd, i * CRYPT_SECTOR_SIZE, SEEK_SET) < 0) {
+         PLOG(ERROR) << "Cannot seek to previously encrypted point on " << crypto_blkdev;
+         goto errout;
+     }
++#endif
+ 
+     for (;i < size && i % CRYPT_SECTORS_PER_BUFSIZE != 0; ++i) {
+         if (unix_read(realfd, buf, CRYPT_SECTOR_SIZE) <= 0) {
+@@ -577,7 +649,12 @@ static int cryptfs_enable_inplace_full(char* crypto_blkdev, char* real_blkdev, o
+ 
+ errout:
+     close(realfd);
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (!is_ice_enabled())
++        close(cryptofd);
++#else
+     close(cryptofd);
++#endif
+ 
+     return rc;
+ }
+diff --git a/VoldUtil.h b/VoldUtil.h
+index fd66672..ac484d8 100644
+--- a/VoldUtil.h
++++ b/VoldUtil.h
+@@ -26,4 +26,7 @@ extern struct fstab *fstab_default;
+ 
+ void get_blkdev_size(int fd, unsigned long* nr_sec);
+ 
++#ifdef CONFIG_HW_DISK_ENCRYPT_PERF
++void get_blkdev_start_sector(int fd, unsigned long* st_sec);
++#endif
+ #endif
+diff --git a/cryptfs.cpp b/cryptfs.cpp
+index ad2fa45..be8e9d5 100644
+--- a/cryptfs.cpp
++++ b/cryptfs.cpp
+@@ -1758,6 +1758,9 @@ static void cryptfs_trigger_restart_min_framework()
+ static int cryptfs_restart_internal(int restart_main)
+ {
+     char crypto_blkdev[MAXPATHLEN];
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++    char blkdev[MAXPATHLEN];
++#endif
+     int rc = -1;
+     static int restart_successful = 0;
+ 
+@@ -1805,6 +1808,24 @@ static int cryptfs_restart_internal(int restart_main)
+      * the tmpfs filesystem, and mount the real one.
+      */
+ 
++#if defined(CONFIG_HW_DISK_ENCRYPTION)
++#if defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (is_ice_enabled()) {
++        fs_mgr_get_crypt_info(fstab_default, 0, blkdev, sizeof(blkdev));
++        if (set_ice_param(START_ENCDEC)) {
++             SLOGE("Failed to set ICE data");
++             return -1;
++        }
++    }
++#else
++    property_get("ro.crypto.fs_crypto_blkdev", blkdev, "");
++    if (strlen(blkdev) == 0) {
++         SLOGE("fs_crypto_blkdev not set\n");
++         return -1;
++    }
++    if (!(rc = wait_and_unmount(DATA_MNT_POINT, true))) {
++#endif
++#else
+     property_get("ro.crypto.fs_crypto_blkdev", crypto_blkdev, "");
+     if (strlen(crypto_blkdev) == 0) {
+         SLOGE("fs_crypto_blkdev not set\n");
+@@ -1812,6 +1833,7 @@ static int cryptfs_restart_internal(int restart_main)
+     }
+ 
+     if (! (rc = wait_and_unmount(DATA_MNT_POINT, true)) ) {
++#endif
+         /* If ro.crypto.readonly is set to 1, mount the decrypted
+          * filesystem readonly.  This is used when /data is mounted by
+          * recovery mode.
+@@ -1835,15 +1857,26 @@ static int cryptfs_restart_internal(int restart_main)
+             SLOGE("Failed to setexeccon");
+             return -1;
+         }
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++        while ((mount_rc = fs_mgr_do_mount(fstab_default, DATA_MNT_POINT,
++                                           blkdev, 0))
++               != 0) {
++#else
+         while ((mount_rc = fs_mgr_do_mount(fstab_default, DATA_MNT_POINT,
+                                            crypto_blkdev, 0))
+                != 0) {
++#endif
+             if (mount_rc == FS_MGR_DOMNT_BUSY) {
+                 /* TODO: invoke something similar to
+                    Process::killProcessWithOpenFiles(DATA_MNT_POINT,
+                                    retries > RETRY_MOUNT_ATTEMPT/2 ? 1 : 2 ) */
++#ifdef CONFIG_HW_DISK_ENCRYPTION
++                SLOGI("Failed to mount %s because it is busy - waiting",
++                      blkdev);
++#else
+                 SLOGI("Failed to mount %s because it is busy - waiting",
+                       crypto_blkdev);
++#endif
+                 if (--retries) {
+                     sleep(RETRY_MOUNT_DELAY_SECONDS);
+                 } else {
+@@ -1889,7 +1922,9 @@ static int cryptfs_restart_internal(int restart_main)
+ 
+         /* Give it a few moments to get started */
+         sleep(1);
++#ifndef CONFIG_HW_DISK_ENCRYPT_PERF
+     }
++#endif
+ 
+     if (rc == 0) {
+         restart_successful = 1;
+@@ -1991,12 +2026,14 @@ static int test_mount_hw_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
+     }
+     else {
+       if (is_ice_enabled()) {
++#ifndef CONFIG_HW_DISK_ENCRYPT_PERF
+         if (create_crypto_blk_dev(crypt_ftr, (unsigned char*)&key_index,
+                             real_blkdev, crypto_blkdev, label, 0)) {
+           SLOGE("Error creating decrypted block device");
+           rc = -1;
+           goto errout;
+         }
++#endif
+       } else {
+         if (create_crypto_blk_dev(crypt_ftr, decrypted_master_key,
+                             real_blkdev, crypto_blkdev, label, 0)) {
+@@ -2016,6 +2053,9 @@ static int test_mount_hw_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
+ 
+     /* Save the name of the crypto block device
+      * so we can mount it when restarting the framework. */
++#ifdef CONFIG_HW_DISK_ENCRYPT_PERF
++    if (!is_ice_enabled())
++#endif
+     property_set("ro.crypto.fs_crypto_blkdev", crypto_blkdev);
+     master_key_saved = 1;
+   }
+@@ -2773,8 +2813,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+     decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
+ #ifdef CONFIG_HW_DISK_ENCRYPTION
+     if (is_hw_disk_encryption((char*)crypt_ftr.crypto_type_name) && is_ice_enabled())
++#ifdef CONFIG_HW_DISK_ENCRYPT_PERF
++      strlcpy(crypto_blkdev, real_blkdev, sizeof(crypto_blkdev));
++#else
+       create_crypto_blk_dev(&crypt_ftr, (unsigned char*)&key_index, real_blkdev, crypto_blkdev,
+                           CRYPTO_BLOCK_DEVICE, 0);
++#endif
+     else
+       create_crypto_blk_dev(&crypt_ftr, decrypted_master_key, real_blkdev, crypto_blkdev,
+                           CRYPTO_BLOCK_DEVICE, 0);
+@@ -2787,6 +2831,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+     rc = 0;
+     if (previously_encrypted_upto) {
+         __le8 hash_first_block[SHA256_DIGEST_LENGTH];
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++        if (set_ice_param(START_ENCDEC)) {
++	   SLOGE("Failed to set ICE data");
++           goto error_shutting_down;
++	}
++#endif
+         rc = cryptfs_SHA256_fileblock(crypto_blkdev, hash_first_block);
+ 
+         if (!rc && memcmp(hash_first_block, crypt_ftr.hash_first_block,
+@@ -2796,11 +2846,23 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+         }
+     }
+ 
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (set_ice_param(START_ENC)) {
++        SLOGE("Failed to set ICE data");
++        goto error_shutting_down;
++    }
++#endif
+     if (!rc) {
+         rc = cryptfs_enable_all_volumes(&crypt_ftr, crypto_blkdev, real_blkdev,
+                                         previously_encrypted_upto);
+     }
+ 
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (set_ice_param(START_ENCDEC)) {
++        SLOGE("Failed to set ICE data");
++        goto error_shutting_down;
++    }
++#endif
+     /* Calculate checksum if we are not finished */
+     if (!rc && crypt_ftr.encrypted_upto != crypt_ftr.fs_size) {
+         rc = cryptfs_SHA256_fileblock(crypto_blkdev,
+@@ -2812,7 +2874,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+     }
+ 
+     /* Undo the dm-crypt mapping whether we succeed or not */
++#if defined(CONFIG_HW_DISK_ENCRYPTION) && defined(CONFIG_HW_DISK_ENCRYPT_PERF)
++    if (!is_ice_enabled())
++       delete_crypto_blk_dev(CRYPTO_BLOCK_DEVICE);
++#else
+     delete_crypto_blk_dev(CRYPTO_BLOCK_DEVICE);
++#endif
+ 
+     if (! rc) {
+         /* Success */
+-- 
+2.19.1
+
+
+From 59e2993a28b048e37d352d012f733ffda729c502 Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mkbestas@lineageos.org>
+Date: Tue, 28 Aug 2018 20:32:58 +0300
+Subject: [PATCH 3/5] vold: Move QCOM HW FDE inclusion under lineage namespace
+
+Change-Id: If6a7a0c159ccf4ffed4c5946bf8be6ad04b6665a
+---
+ Android.bp | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/Android.bp b/Android.bp
+index 416b493..5bc254a 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -140,13 +140,15 @@ cc_library_static {
+                 "libarcobbvolume",
+             ],
+         },
+-        device_support_hwfde: {
+-            cflags: ["-DCONFIG_HW_DISK_ENCRYPTION"],
+-            header_libs: ["libcryptfs_hw_headers"],
+-            shared_libs: ["libcryptfs_hw"],
+-        },
+-        device_support_hwfde_perf: {
+-            cflags: ["-DCONFIG_HW_DISK_ENCRYPT_PERF"],
++        lineage: {
++            device_support_hwfde: {
++                cflags: ["-DCONFIG_HW_DISK_ENCRYPTION"],
++                header_libs: ["libcryptfs_hw_headers"],
++                shared_libs: ["libcryptfs_hw"],
++            },
++            device_support_hwfde_perf: {
++                cflags: ["-DCONFIG_HW_DISK_ENCRYPT_PERF"],
++            },
+         },
+     },
+ }
+@@ -167,8 +169,10 @@ cc_binary {
+                 "libarcobbvolume",
+             ],
+         },
+-        device_support_hwfde: {
+-            shared_libs: ["libcryptfs_hw"],
++        lineage: {
++            device_support_hwfde: {
++                shared_libs: ["libcryptfs_hw"],
++            },
+         },
+     },
+     init_rc: [
+-- 
+2.19.1
+
+
+From 111d4397dbd89154a920cc891c62e86633e290da Mon Sep 17 00:00:00 2001
+From: Shivaprasad Hongal <shongal@codeaurora.org>
+Date: Thu, 5 Jul 2018 14:49:12 -0700
+Subject: [PATCH 4/5] vold: Wrapped key support for FBE
+
+Changes to key management in vold such that no keys
+are present in the clear in HLOS. Using keymaster to
+generate and manage keys.
+
+CRs-Fixed: 2288316
+
+Change-Id: Iaf5bf2eb60c60364f495e6d176e19b4848850028
+---
+ Ext4Crypt.cpp                | 164 ++++++++++++++++++++++++++++++++---
+ Ext4Crypt.h                  |   4 +
+ KeyStorage.cpp               |  42 +++++++++
+ KeyStorage.h                 |  11 ++-
+ KeyUtil.cpp                  |  31 ++++++-
+ KeyUtil.h                    |   4 +-
+ Keymaster.cpp                |  26 ++++++
+ Keymaster.h                  |   3 +
+ VoldNativeService.cpp        |   8 ++
+ VoldNativeService.h          |   2 +
+ binder/android/os/IVold.aidl |   1 +
+ 11 files changed, 276 insertions(+), 20 deletions(-)
+
+diff --git a/Ext4Crypt.cpp b/Ext4Crypt.cpp
+index 67b7e90..4432a21 100644
+--- a/Ext4Crypt.cpp
++++ b/Ext4Crypt.cpp
+@@ -16,6 +16,7 @@
+ 
+ #include "Ext4Crypt.h"
+ 
++#include "Keymaster.h"
+ #include "KeyStorage.h"
+ #include "KeyUtil.h"
+ #include "Utils.h"
+@@ -62,6 +63,8 @@ using android::base::StringPrintf;
+ using android::base::WriteStringToFile;
+ using android::vold::kEmptyAuthentication;
+ using android::vold::KeyBuffer;
++using android::vold::Keymaster;
++using android::hardware::keymaster::V4_0::KeyFormat;
+ 
+ namespace {
+ 
+@@ -196,12 +199,46 @@ static bool read_and_fixate_user_ce_key(userid_t user_id,
+     return false;
+ }
+ 
++static bool is_wrapped_key_supported_common(const std::string& mount_point) {
++    struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab_default, mount_point);
++    char const* contents_mode = NULL;
++    char const* filenames_mode = NULL;
++
++    fs_mgr_get_file_encryption_modes(rec, &contents_mode, &filenames_mode);
++    if (!contents_mode || !filenames_mode) {
++        LOG(ERROR) << "Couldn't read file or contents mode, returning false";
++        return false;
++    }
++
++    if (strcmp(contents_mode, "ice_wrapped_key_supported") == 0)
++        return true;
++    else
++        return false;
++}
++
++bool is_wrapped_key_supported() {
++    return is_wrapped_key_supported_common(DATA_MNT_POINT);
++}
++
++bool is_wrapped_key_supported_external() {
++    return false;
++}
++
+ static bool read_and_install_user_ce_key(userid_t user_id,
+                                          const android::vold::KeyAuthentication& auth) {
+     if (s_ce_key_raw_refs.count(user_id) != 0) return true;
+     KeyBuffer ce_key;
+     if (!read_and_fixate_user_ce_key(user_id, auth, &ce_key)) return false;
+     std::string ce_raw_ref;
++
++    if (is_wrapped_key_supported()) {
++        KeyBuffer ephemeral_wrapped_key;
++        if (!getEphemeralWrappedKey(KeyFormat::RAW, ce_key, &ephemeral_wrapped_key)) {
++           LOG(ERROR) << "Failed to export ce key";
++           return false;
++        }
++        ce_key = std::move(ephemeral_wrapped_key);
++    }
+     if (!android::vold::installKey(ce_key, &ce_raw_ref)) return false;
+     s_ce_keys[user_id] = std::move(ce_key);
+     s_ce_key_raw_refs[user_id] = ce_raw_ref;
+@@ -231,8 +268,15 @@ static bool destroy_dir(const std::string& dir) {
+ // it creates keys in a fixed location.
+ static bool create_and_install_user_keys(userid_t user_id, bool create_ephemeral) {
+     KeyBuffer de_key, ce_key;
+-    if (!android::vold::randomKey(&de_key)) return false;
+-    if (!android::vold::randomKey(&ce_key)) return false;
++
++    if(is_wrapped_key_supported()) {
++        if (!generateWrappedKey(user_id, android::vold::KeyType::DE_USER, &de_key)) return false;
++        if (!generateWrappedKey(user_id, android::vold::KeyType::CE_USER, &ce_key)) return false;
++    } else {
++        if (!android::vold::randomKey(&de_key)) return false;
++        if (!android::vold::randomKey(&ce_key)) return false;
++    }
++
+     if (create_ephemeral) {
+         // If the key should be created as ephemeral, don't store it.
+         s_ephemeral_users.insert(user_id);
+@@ -249,13 +293,36 @@ static bool create_and_install_user_keys(userid_t user_id, bool create_ephemeral
+         if (!android::vold::storeKeyAtomically(get_de_key_path(user_id), user_key_temp,
+                 kEmptyAuthentication, de_key)) return false;
+     }
++
++    /* Install the DE keys */
+     std::string de_raw_ref;
+-    if (!android::vold::installKey(de_key, &de_raw_ref)) return false;
+-    s_de_key_raw_refs[user_id] = de_raw_ref;
+     std::string ce_raw_ref;
++
++    if (is_wrapped_key_supported()) {
++        KeyBuffer ephemeral_wrapped_de_key;
++        KeyBuffer ephemeral_wrapped_ce_key;
++
++        /* Export and install the DE keys */
++        if (!getEphemeralWrappedKey(KeyFormat::RAW, de_key, &ephemeral_wrapped_de_key)) {
++           LOG(ERROR) << "Failed to export de_key";
++           return false;
++        }
++        /* Export and install the CE keys */
++        if (!getEphemeralWrappedKey(KeyFormat::RAW, ce_key, &ephemeral_wrapped_ce_key)) {
++           LOG(ERROR) << "Failed to export de_key";
++           return false;
++        }
++
++        de_key = std::move(ephemeral_wrapped_de_key);
++        ce_key = std::move(ephemeral_wrapped_ce_key);
++    }
++    if (!android::vold::installKey(de_key, &de_raw_ref)) return false;
+     if (!android::vold::installKey(ce_key, &ce_raw_ref)) return false;
+-    s_ce_keys[user_id] = ce_key;
++    s_ce_keys[user_id] = std::move(ce_key);
++
++    s_de_key_raw_refs[user_id] = de_raw_ref;
+     s_ce_key_raw_refs[user_id] = ce_raw_ref;
++
+     LOG(DEBUG) << "Created keys for user " << user_id;
+     return true;
+ }
+@@ -320,6 +387,14 @@ static bool load_all_de_keys() {
+             KeyBuffer key;
+             if (!android::vold::retrieveKey(key_path, kEmptyAuthentication, &key)) return false;
+             std::string raw_ref;
++            if (is_wrapped_key_supported()) {
++                KeyBuffer ephemeral_wrapped_key;
++                if (!getEphemeralWrappedKey(KeyFormat::RAW, key, &ephemeral_wrapped_key)) {
++                   LOG(ERROR) << "Failed to export de_key in create_and_install_user_keys";
++                   return false;
++                }
++                key = std::move(ephemeral_wrapped_key);
++            }
+             if (!android::vold::installKey(key, &raw_ref)) return false;
+             s_de_key_raw_refs[user_id] = raw_ref;
+             LOG(DEBUG) << "Installed de key for user " << user_id;
+@@ -332,6 +407,7 @@ static bool load_all_de_keys() {
+ 
+ bool e4crypt_initialize_global_de() {
+     LOG(INFO) << "e4crypt_initialize_global_de";
++    bool wrapped_key_supported = false;
+ 
+     if (s_global_de_initialized) {
+         LOG(INFO) << "Already initialized";
+@@ -339,8 +415,11 @@ bool e4crypt_initialize_global_de() {
+     }
+ 
+     PolicyKeyRef device_ref;
+-    if (!android::vold::retrieveAndInstallKey(true, kEmptyAuthentication, device_key_path,
+-                                              device_key_temp, &device_ref.key_raw_ref))
++    wrapped_key_supported = is_wrapped_key_supported();
++
++    if (!android::vold::retrieveAndInstallKey(true, kEmptyAuthentication,
++                       device_key_path, device_key_temp,
++                           &device_ref.key_raw_ref, wrapped_key_supported))
+         return false;
+     get_data_file_encryption_modes(&device_ref);
+ 
+@@ -514,6 +593,7 @@ static bool read_or_create_volkey(const std::string& misc_path, const std::strin
+                                   PolicyKeyRef* key_ref) {
+     auto secdiscardable_path = volume_secdiscardable_path(volume_uuid);
+     std::string secdiscardable_hash;
++    bool wrapped_key_supported = false;
+     if (android::vold::pathExists(secdiscardable_path)) {
+         if (!android::vold::readSecdiscardable(secdiscardable_path, &secdiscardable_hash))
+             return false;
+@@ -531,8 +611,10 @@ static bool read_or_create_volkey(const std::string& misc_path, const std::strin
+         return false;
+     }
+     android::vold::KeyAuthentication auth("", secdiscardable_hash);
++    wrapped_key_supported = is_wrapped_key_supported_external();
++
+     if (!android::vold::retrieveAndInstallKey(true, auth, key_path, key_path + "_tmp",
+-                                              &key_ref->key_raw_ref))
++                                              &key_ref->key_raw_ref, wrapped_key_supported))
+         return false;
+     key_ref->contents_mode =
+         android::base::GetProperty("ro.crypto.volume.contents_mode", "aes-256-xts");
+@@ -558,20 +640,74 @@ bool e4crypt_add_user_key_auth(userid_t user_id, int serial, const std::string&
+     if (!parse_hex(secret_hex, &secret)) return false;
+     auto auth = secret.empty() ? kEmptyAuthentication
+                                    : android::vold::KeyAuthentication(token, secret);
+-    auto it = s_ce_keys.find(user_id);
+-    if (it == s_ce_keys.end()) {
+-        LOG(ERROR) << "Key not loaded into memory, can't change for user " << user_id;
+-        return false;
+-    }
+-    const auto &ce_key = it->second;
+     auto const directory_path = get_ce_key_directory_path(user_id);
+     auto const paths = get_ce_key_paths(directory_path);
++
++    KeyBuffer ce_key;
++    if(is_wrapped_key_supported()) {
++        std::string ce_key_current_path = get_ce_key_current_path(directory_path);
++        if (android::vold::retrieveKey(ce_key_current_path, kEmptyAuthentication, &ce_key)) {
++            LOG(DEBUG) << "Successfully retrieved key";
++        } else {
++            if (android::vold::retrieveKey(ce_key_current_path, auth, &ce_key)) {
++                LOG(DEBUG) << "Successfully retrieved key";
++            }
++        }
++    } else {
++        auto it = s_ce_keys.find(user_id);
++        if (it == s_ce_keys.end()) {
++            LOG(ERROR) << "Key not loaded into memory, can't change for user " << user_id;
++            return false;
++        }
++        ce_key = it->second;
++    }
++
+     std::string ce_key_path;
+     if (!get_ce_key_new_path(directory_path, paths, &ce_key_path)) return false;
+     if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp, auth, ce_key)) return false;
+     return true;
+ }
+ 
++bool e4crypt_clear_user_key_auth(userid_t user_id, int serial, const std::string& token_hex,
++                                 const std::string& secret_hex) {
++    LOG(DEBUG) << "e4crypt_clear_user_key_auth " << user_id << " serial=" << serial
++               << " token_present=" << (token_hex != "!");
++    if (!e4crypt_is_native()) return true;
++    if (s_ephemeral_users.count(user_id) != 0) return true;
++    std::string token, secret;
++
++    if (!parse_hex(token_hex, &token)) return false;
++    if (!parse_hex(secret_hex, &secret)) return false;
++
++    if (is_wrapped_key_supported()) {
++        auto const directory_path = get_ce_key_directory_path(user_id);
++        auto const paths = get_ce_key_paths(directory_path);
++
++        KeyBuffer ce_key;
++        std::string ce_key_current_path = get_ce_key_current_path(directory_path);
++
++        auto auth = android::vold::KeyAuthentication(token, secret);
++        /* Retrieve key while removing a pin. A secret is needed */
++        if (android::vold::retrieveKey(ce_key_current_path, auth, &ce_key)) {
++            LOG(DEBUG) << "Successfully retrieved key";
++        } else {
++            /* Retrieve key when going None to swipe and vice versa when a
++               synthetic password is present */
++            if (android::vold::retrieveKey(ce_key_current_path, kEmptyAuthentication, &ce_key)) {
++                LOG(DEBUG) << "Successfully retrieved key";
++            }
++        }
++
++        std::string ce_key_path;
++        if (!get_ce_key_new_path(directory_path, paths, &ce_key_path)) return false;
++        if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp, kEmptyAuthentication, ce_key))
++            return false;
++    } else {
++        if(!e4crypt_add_user_key_auth(user_id, serial, "!", "!")) return false;
++    }
++    return true;
++}
++
+ bool e4crypt_fixate_newest_user_key_auth(userid_t user_id) {
+     LOG(DEBUG) << "e4crypt_fixate_newest_user_key_auth " << user_id;
+     if (!e4crypt_is_native()) return true;
+diff --git a/Ext4Crypt.h b/Ext4Crypt.h
+index a43a68a..5101bf6 100644
+--- a/Ext4Crypt.h
++++ b/Ext4Crypt.h
+@@ -25,6 +25,8 @@ bool e4crypt_vold_create_user_key(userid_t user_id, int serial, bool ephemeral);
+ bool e4crypt_destroy_user_key(userid_t user_id);
+ bool e4crypt_add_user_key_auth(userid_t user_id, int serial, const std::string& token,
+                                const std::string& secret);
++bool e4crypt_clear_user_key_auth(userid_t user_id, int serial, const std::string& token_hex,
++                               const std::string& secret_hex);
+ bool e4crypt_fixate_newest_user_key_auth(userid_t user_id);
+ 
+ bool e4crypt_unlock_user_key(userid_t user_id, int serial, const std::string& token,
+@@ -36,3 +38,5 @@ bool e4crypt_prepare_user_storage(const std::string& volume_uuid, userid_t user_
+ bool e4crypt_destroy_user_storage(const std::string& volume_uuid, userid_t user_id, int flags);
+ 
+ bool e4crypt_destroy_volume_keys(const std::string& volume_uuid);
++bool is_wrapped_key_supported();
++bool is_wrapped_key_supported_external();
+diff --git a/KeyStorage.cpp b/KeyStorage.cpp
+index 0518930..69cd41c 100644
+--- a/KeyStorage.cpp
++++ b/KeyStorage.cpp
+@@ -61,6 +61,7 @@ static constexpr size_t SECDISCARDABLE_BYTES = 1 << 14;
+ static constexpr size_t STRETCHED_BYTES = 1 << 6;
+ 
+ static constexpr uint32_t AUTH_TIMEOUT = 30;  // Seconds
++constexpr int EXT4_AES_256_XTS_KEY_SIZE = 64;
+ 
+ static const char* kCurrentVersion = "1";
+ static const char* kRmPath = "/system/bin/rm";
+@@ -126,6 +127,47 @@ static bool generateKeymasterKey(Keymaster& keymaster, const KeyAuthentication&
+     return keymaster.generateKey(paramBuilder, key);
+ }
+ 
++bool generateWrappedKey(userid_t user_id, KeyType key_type,
++                                     KeyBuffer* key) {
++    Keymaster keymaster;
++    if (!keymaster) return false;
++    *key = KeyBuffer(EXT4_AES_256_XTS_KEY_SIZE);
++    std::string key_temp;
++    auto paramBuilder = km::AuthorizationSetBuilder()
++                               .AesEncryptionKey(AES_KEY_BYTES * 8)
++                               .GcmModeMinMacLen(GCM_MAC_BYTES * 8)
++                               .Authorization(km::TAG_USER_ID, user_id);
++    km::KeyParameter param1;
++    param1.tag = (km::Tag) (android::hardware::keymaster::V4_0::KM_TAG_FBE_ICE);
++    param1.f.boolValue = true;
++    paramBuilder.push_back(param1);
++
++    km::KeyParameter param2;
++    if ((key_type == KeyType::DE_USER) || (key_type == KeyType::DE_SYS)) {
++        param2.tag = (km::Tag) (android::hardware::keymaster::V4_0::KM_TAG_KEY_TYPE);
++        param2.f.integer = 0;
++    } else if (key_type == KeyType::CE_USER) {
++        param2.tag = (km::Tag) (android::hardware::keymaster::V4_0::KM_TAG_KEY_TYPE);
++        param2.f.integer = 1;
++    }
++    paramBuilder.push_back(param2);
++
++    if (!keymaster.generateKey(paramBuilder, &key_temp)) return false;
++    *key = KeyBuffer(key_temp.size());
++    memcpy(reinterpret_cast<void*>(key->data()), key_temp.c_str(), key->size());
++    return true;
++}
++
++bool getEphemeralWrappedKey(km::KeyFormat format, KeyBuffer& kmKey, KeyBuffer* key) {
++    std::string key_temp;
++    Keymaster keymaster;
++    if (!keymaster) return false;
++    if (!keymaster.exportKey(format, kmKey, "!", "!", &key_temp)) return false;
++    *key = KeyBuffer(key_temp.size());
++    memcpy(reinterpret_cast<void*>(key->data()), key_temp.c_str(), key->size());
++    return true;
++}
++
+ static std::pair<km::AuthorizationSet, km::HardwareAuthToken> beginParams(
+     const KeyAuthentication& auth, const std::string& appId) {
+     auto paramBuilder = km::AuthorizationSetBuilder()
+diff --git a/KeyStorage.h b/KeyStorage.h
+index 786e5b4..0c2609e 100644
+--- a/KeyStorage.h
++++ b/KeyStorage.h
+@@ -17,8 +17,9 @@
+ #ifndef ANDROID_VOLD_KEYSTORAGE_H
+ #define ANDROID_VOLD_KEYSTORAGE_H
+ 
++#include "Keymaster.h"
+ #include "KeyBuffer.h"
+-
++#include <ext4_utils/ext4_crypt.h>
+ #include <string>
+ 
+ namespace android {
+@@ -39,6 +40,12 @@ class KeyAuthentication {
+     const std::string secret;
+ };
+ 
++enum class KeyType {
++    DE_SYS,
++    DE_USER,
++    CE_USER
++};
++
+ extern const KeyAuthentication kEmptyAuthentication;
+ 
+ // Checks if path "path" exists.
+@@ -67,6 +74,8 @@ bool retrieveKey(const std::string& dir, const KeyAuthentication& auth, KeyBuffe
+ bool destroyKey(const std::string& dir);
+ 
+ bool runSecdiscardSingle(const std::string& file);
++bool generateWrappedKey(userid_t user_id, KeyType key_type, KeyBuffer* key);
++bool getEphemeralWrappedKey(km::KeyFormat format, KeyBuffer& kmKey, KeyBuffer* key);
+ }  // namespace vold
+ }  // namespace android
+ 
+diff --git a/KeyUtil.cpp b/KeyUtil.cpp
+index 9885440..e8c366f 100644
+--- a/KeyUtil.cpp
++++ b/KeyUtil.cpp
+@@ -27,8 +27,13 @@
+ #include <keyutils.h>
+ 
+ #include "KeyStorage.h"
++#include "Ext4Crypt.h"
+ #include "Utils.h"
+ 
++#define MAX_USER_ID 0xFFFFFFFF
++
++using android::hardware::keymaster::V4_0::KeyFormat;
++using android::vold::KeyType;
+ namespace android {
+ namespace vold {
+ 
+@@ -122,7 +127,14 @@ bool installKey(const KeyBuffer& key, std::string* raw_ref) {
+     ext4_encryption_key &ext4_key = *reinterpret_cast<ext4_encryption_key*>(ext4KeyBuffer.data());
+ 
+     if (!fillKey(key, &ext4_key)) return false;
+-    *raw_ref = generateKeyRef(ext4_key.raw, ext4_key.size);
++    if (is_wrapped_key_supported()) {
++        /* When wrapped key is supported, only the first 32 bytes are
++           the same per boot. The second 32 bytes can change as the ephemeral
++           key is different. */
++        *raw_ref = generateKeyRef(ext4_key.raw, (ext4_key.size)/2);
++    } else {
++        *raw_ref = generateKeyRef(ext4_key.raw, ext4_key.size);
++    }
+     key_serial_t device_keyring;
+     if (!e4cryptKeyring(&device_keyring)) return false;
+     for (char const* const* name_prefix = NAME_PREFIXES; *name_prefix != nullptr; name_prefix++) {
+@@ -163,7 +175,7 @@ bool evictKey(const std::string& raw_ref) {
+ 
+ bool retrieveAndInstallKey(bool create_if_absent, const KeyAuthentication& key_authentication,
+                            const std::string& key_path, const std::string& tmp_path,
+-                           std::string* key_ref) {
++                           std::string* key_ref, bool wrapped_key_supported) {
+     KeyBuffer key;
+     if (pathExists(key_path)) {
+         LOG(DEBUG) << "Key exists, using: " << key_path;
+@@ -174,10 +186,23 @@ bool retrieveAndInstallKey(bool create_if_absent, const KeyAuthentication& key_a
+            return false;
+         }
+         LOG(INFO) << "Creating new key in " << key_path;
+-        if (!randomKey(&key)) return false;
++        if (wrapped_key_supported) {
++            if(!generateWrappedKey(MAX_USER_ID, KeyType::DE_SYS, &key)) return false;
++        } else {
++            if (!randomKey(&key)) return false;
++        }
+         if (!storeKeyAtomically(key_path, tmp_path, key_authentication, key)) return false;
+     }
+ 
++    if (wrapped_key_supported) {
++        KeyBuffer ephemeral_wrapped_key;
++        if (!getEphemeralWrappedKey(KeyFormat::RAW, key, &ephemeral_wrapped_key)) {
++            LOG(ERROR) << "Failed to export key in retrieveAndInstallKey";
++            return false;
++        }
++        key = std::move(ephemeral_wrapped_key);
++    }
++
+     if (!installKey(key, key_ref)) {
+         LOG(ERROR) << "Failed to install key in " << key_path;
+         return false;
+diff --git a/KeyUtil.h b/KeyUtil.h
+index a85eca1..e73c065 100644
+--- a/KeyUtil.h
++++ b/KeyUtil.h
+@@ -19,6 +19,7 @@
+ 
+ #include "KeyBuffer.h"
+ #include "KeyStorage.h"
++#include "Keymaster.h"
+ 
+ #include <string>
+ #include <memory>
+@@ -31,10 +32,9 @@ bool installKey(const KeyBuffer& key, std::string* raw_ref);
+ bool evictKey(const std::string& raw_ref);
+ bool retrieveAndInstallKey(bool create_if_absent, const KeyAuthentication& key_authentication,
+                            const std::string& key_path, const std::string& tmp_path,
+-                           std::string* key_ref);
++                           std::string* key_ref, bool wrapped_key_supported);
+ bool retrieveKey(bool create_if_absent, const std::string& key_path,
+                  const std::string& tmp_path, KeyBuffer* key);
+-
+ }  // namespace vold
+ }  // namespace android
+ 
+diff --git a/Keymaster.cpp b/Keymaster.cpp
+index aad4387..ab39ef8 100644
+--- a/Keymaster.cpp
++++ b/Keymaster.cpp
+@@ -138,6 +138,32 @@ bool Keymaster::generateKey(const km::AuthorizationSet& inParams, std::string* k
+     return true;
+ }
+ 
++bool Keymaster::exportKey(km::KeyFormat format, KeyBuffer& kmKey, const std::string& clientId,
++                          const std::string& appData, std::string* key) {
++    auto kmKeyBlob = km::support::blob2hidlVec(std::string(kmKey.data(), kmKey.size()));
++    auto emptyAssign = NULL;
++    auto kmClientId = (clientId == "!") ? emptyAssign: km::support::blob2hidlVec(clientId);
++    auto kmAppData = (appData == "!") ? emptyAssign: km::support::blob2hidlVec(appData);
++    km::ErrorCode km_error;
++    auto hidlCb = [&](km::ErrorCode ret, const hidl_vec<uint8_t>& exportedKeyBlob) {
++        km_error = ret;
++        if (km_error != km::ErrorCode::OK) return;
++        if(key)
++            key->assign(reinterpret_cast<const char*>(&exportedKeyBlob[0]),
++                            exportedKeyBlob.size());
++    };
++    auto error = mDevice->exportKey(format, kmKeyBlob, kmClientId, kmAppData, hidlCb);
++    if (!error.isOk()) {
++        LOG(ERROR) << "export_key failed: " << error.description();
++        return false;
++    }
++    if (km_error != km::ErrorCode::OK) {
++        LOG(ERROR) << "export_key failed, code " << int32_t(km_error);
++        return false;
++    }
++    return true;
++}
++
+ bool Keymaster::deleteKey(const std::string& key) {
+     auto keyBlob = km::support::blob2hidlVec(key);
+     auto error = mDevice->deleteKey(keyBlob);
+diff --git a/Keymaster.h b/Keymaster.h
+index fabe0f4..c0ec4d3 100644
+--- a/Keymaster.h
++++ b/Keymaster.h
+@@ -102,6 +102,9 @@ class Keymaster {
+     explicit operator bool() { return mDevice.get() != nullptr; }
+     // Generate a key in the keymaster from the given params.
+     bool generateKey(const km::AuthorizationSet& inParams, std::string* key);
++    // Export a key from keymaster.
++    bool exportKey(km::KeyFormat format, KeyBuffer& kmKey, const std::string& clientId,
++                   const std::string& appData, std::string* key);
+     // If the keymaster supports it, permanently delete a key.
+     bool deleteKey(const std::string& key);
+     // Replace stored key blob in response to KM_ERROR_KEY_REQUIRES_UPGRADE.
+diff --git a/VoldNativeService.cpp b/VoldNativeService.cpp
+index 6d6c6ec..6bd506a 100644
+--- a/VoldNativeService.cpp
++++ b/VoldNativeService.cpp
+@@ -715,6 +715,14 @@ binder::Status VoldNativeService::addUserKeyAuth(int32_t userId, int32_t userSer
+     return translateBool(e4crypt_add_user_key_auth(userId, userSerial, token, secret));
+ }
+ 
++binder::Status VoldNativeService::clearUserKeyAuth(int32_t userId, int32_t userSerial,
++        const std::string& token, const std::string& secret) {
++    ENFORCE_UID(AID_SYSTEM);
++    ACQUIRE_CRYPT_LOCK;
++
++    return translateBool(e4crypt_clear_user_key_auth(userId, userSerial, token, secret));
++}
++
+ binder::Status VoldNativeService::fixateNewestUserKeyAuth(int32_t userId) {
+     ENFORCE_UID(AID_SYSTEM);
+     ACQUIRE_CRYPT_LOCK;
+diff --git a/VoldNativeService.h b/VoldNativeService.h
+index da8c660..2403678 100644
+--- a/VoldNativeService.h
++++ b/VoldNativeService.h
+@@ -103,6 +103,8 @@ public:
+ 
+     binder::Status addUserKeyAuth(int32_t userId, int32_t userSerial,
+             const std::string& token, const std::string& secret);
++    binder::Status clearUserKeyAuth(int32_t userId, int32_t userSerial,
++            const std::string& token, const std::string& secret);
+     binder::Status fixateNewestUserKeyAuth(int32_t userId);
+ 
+     binder::Status unlockUserKey(int32_t userId, int32_t userSerial,
+diff --git a/binder/android/os/IVold.aidl b/binder/android/os/IVold.aidl
+index 9f5b21a..3a54390 100644
+--- a/binder/android/os/IVold.aidl
++++ b/binder/android/os/IVold.aidl
+@@ -85,6 +85,7 @@ interface IVold {
+     void destroyUserKey(int userId);
+ 
+     void addUserKeyAuth(int userId, int userSerial, @utf8InCpp String token, @utf8InCpp String secret);
++    void clearUserKeyAuth(int userId, int userSerial, @utf8InCpp String token, @utf8InCpp String secret);
+     void fixateNewestUserKeyAuth(int userId);
+ 
+     void unlockUserKey(int userId, int userSerial, @utf8InCpp String token, @utf8InCpp String secret);
+-- 
+2.19.1
+
+
+From d5546acd77ac554dd058cafecc1bff94175c77e9 Mon Sep 17 00:00:00 2001
+From: LuK1337 <priv.luk@gmail.com>
+Date: Mon, 17 Sep 2018 17:42:17 +0200
+Subject: [PATCH 5/5] vold: Add texfat and sdfat support
+
+* These drivers will be used as a fallback in case
+  exfat is not listed in /proc/filesystems.
+
+Change-Id: I55336840b56d0e1cb6f2939ea5beb6e7c69f2f5b
+---
+ fs/Exfat.cpp | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/fs/Exfat.cpp b/fs/Exfat.cpp
+index 5c15075..77acffe 100644
+--- a/fs/Exfat.cpp
++++ b/fs/Exfat.cpp
+@@ -32,10 +32,19 @@ namespace exfat {
+ 
+ static const char* kMkfsPath = "/system/bin/mkfs.exfat";
+ static const char* kFsckPath = "/system/bin/fsck.exfat";
++static std::string gDriver = "exfat";
+ 
+ bool IsSupported() {
+-    return access(kMkfsPath, X_OK) == 0 && access(kFsckPath, X_OK) == 0 &&
+-           IsFilesystemSupported("exfat");
++    if (access(kMkfsPath, X_OK) != 0 || access(kFsckPath, X_OK) != 0) {
++        return false;
++    }
++    for (const auto& driver : {"exfat", "sdfat", "texfat"}) {
++        if (IsFilesystemSupported(driver)) {
++            gDriver = driver;
++            return true;
++        }
++    }
++    return false;
+ }
+ 
+ status_t Check(const std::string& source) {
+@@ -60,13 +69,13 @@ status_t Mount(const std::string& source, const std::string& target, int ownerUi
+     auto mountData = android::base::StringPrintf("uid=%d,gid=%d,fmask=%o,dmask=%o", ownerUid,
+                                                  ownerGid, permMask, permMask);
+ 
+-    if (mount(source.c_str(), target.c_str(), "exfat", mountFlags, mountData.c_str()) == 0) {
++    if (mount(source.c_str(), target.c_str(), gDriver.c_str(), mountFlags, mountData.c_str()) == 0) {
+         return 0;
+     }
+ 
+     PLOG(ERROR) << "Mount failed; attempting read-only";
+     mountFlags |= MS_RDONLY;
+-    if (mount(source.c_str(), target.c_str(), "exfat", mountFlags, mountData.c_str()) == 0) {
++    if (mount(source.c_str(), target.c_str(), gDriver.c_str(), mountFlags, mountData.c_str()) == 0) {
+         return 0;
+     }
+ 
+-- 
+2.19.1
+
