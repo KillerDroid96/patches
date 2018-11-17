@@ -1,9 +1,9 @@
-From 195201283ce5fcea7e95c39efdd4cb287f3b5b96 Mon Sep 17 00:00:00 2001
+From 2d726d96ceeff453bbaf9c354fb54ada50ca98bf Mon Sep 17 00:00:00 2001
 From: KillerDroid96 <mkeller96@gmail.com>
-Date: Fri, 16 Nov 2018 16:49:59 -0600
+Date: Fri, 16 Nov 2018 20:33:45 -0600
 Subject: [PATCH] Update install graphics
 
-Change-Id: I002d54d3a655fc3bbdb1f0357e332419beef4181
+Change-Id: Id1c1ab1fb8dbcd6af37d622dd5ac516f93c76ba3
 ---
  tools/releasetools/ota_from_target_files.py | 68 +++++++++++++--------
  1 file changed, 41 insertions(+), 27 deletions(-)
